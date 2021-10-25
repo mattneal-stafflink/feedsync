@@ -796,6 +796,7 @@ class FEEDSYNC_PROCESSOR {
             foreach($alllistings as $listing) {
                 $this->xmlFile = new DOMDocument('1.0', 'UTF-8');
                 $this->xmlFile->preserveWhiteSpace = FALSE;
+                $this->xmlFile->recover = TRUE;
                 $this->xmlFile->loadXML($listing->xml);
                 $this->xmlFile->formatOutput = TRUE;
                 $this->xpath = new DOMXPath($this->xmlFile);
@@ -1814,6 +1815,7 @@ class FEEDSYNC_PROCESSOR {
             '&lsaquo;'   => '&#8249;', # single left-pointing angle quotation mark, U+2039 ISO proposed
             '&rsaquo;'   => '&#8250;', # single right-pointing angle quotation mark, U+203A ISO proposed
             '&euro;'     => '&#8364;', # euro sign, U+20AC NEW
+            '&amp;#xD'   => ''         # Carriage return  
         );
 
         return strtr($source, $table );

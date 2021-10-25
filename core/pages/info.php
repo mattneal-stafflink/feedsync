@@ -109,6 +109,17 @@ Version: 2.0
 						}
 					?>
 				</li>
+                                <li class="list-group-item">
+					<?php 
+						if (extension_loaded('mbstring')) {
+							echo '<span class="label label-default">'.__('MB String Extension').'</span>';
+						    echo '<span class="label label-success pull-right">'.__('Enabled','feedsync').'</span>';
+						} else {
+							echo '<span class="label label-default">'.__('MB String Extension').'</span>';
+						    echo '<span class="label label-danger pull-right">'.__('Not Enabled','feedsync').'</span>';
+						}
+					?>
+				</li>
 				<?php
 					$paths = array(
 								INPUT_PATH     =>	__('Input Folder','feedsync'),

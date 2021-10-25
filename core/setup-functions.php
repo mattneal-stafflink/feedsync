@@ -891,6 +891,7 @@ function get_transient($key) {
 function feedsync_show_extension_errors() {
 
     $z_ex = get_files_list(get_path('input'),"zip|ZIP");
+
     if( !empty($z_ex) && !class_exists('ZipArchive') ) {
         add_sitewide_notices('Zip Extension is required','danger');
     }
@@ -906,6 +907,7 @@ function feedsync_show_extension_errors() {
         'allow_url_fopen',
         'ftp',
         'dom',
+        'mbstring'
     );
 
     $disabled = array();

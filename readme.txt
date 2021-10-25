@@ -5,7 +5,7 @@ Contributors: mervb
 Tags: importer, reaxml, real estate, property, jupix, blm, eac, expert agent, rockend rest, xml2u
 Donate link: https://easypropertylistings.com.au/support-the-site/
 
-Stable tag: 3.5.1
+Stable tag: 3.5.3
 
 License: GNU Version 2 or Any Later Version
 
@@ -51,6 +51,16 @@ Add this to the config.php file to display errors:
 define('FEEDSYNC_DEBUG_DISPLAY', true );
 
 == Change log ==
+
+3.5.3, October 4, 2021
+
+* Tweak: Added a global notice for the mbstring PHP library requirement.
+* Tweak: Added the mbstring php requirement to the system info page.
+* Fix: Carriage return XML encoding character.
+
+3.5.2, July 29, 2021
+
+* Fix: XML Recovery process added in the event the XML has some unknown characters that could prevent processing the file.
 
 3.5.1, July 16, 2021
 
