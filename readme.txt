@@ -5,7 +5,7 @@ Contributors: mervb
 Tags: importer, reaxml, real estate, property, jupix, blm, eac, expert agent, rockend rest, xml2u
 Donate link: https://easypropertylistings.com.au/support-the-site/
 
-Stable tag: 3.5.3
+Stable tag: 3.5.4
 
 License: GNU Version 2 or Any Later Version
 
@@ -51,6 +51,10 @@ Add this to the config.php file to display errors:
 define('FEEDSYNC_DEBUG_DISPLAY', true );
 
 == Change log ==
+
+3.5.4, October 13, 2021
+
+* New: We are now tracking image id so if the image id's order is changed then the image mod time is incremented which will trigger an update.
 
 3.5.3, October 4, 2021
 

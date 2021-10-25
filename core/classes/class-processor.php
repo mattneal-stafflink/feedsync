@@ -715,6 +715,10 @@ class FEEDSYNC_PROCESSOR {
 
         }
 
+        /** Image order change */
+
+        $item = $this->detect_image_order_change( $item );
+
         /** Sold Date  */
 
         if( $this->has_node($item,'soldDetails') ) {
@@ -772,6 +776,73 @@ class FEEDSYNC_PROCESSOR {
 
             if( is_writable( $this->path ) )
                 $this->xmlFile->save($this->path);
+        }
+
+        return $item;
+    }
+
+    public function detect_image_order_change( $item ) {
+
+        /** Image order change detection */
+        $fs_unique_id = $this->get_node_value($item,'feedsyncUniqueID');
+                
+        if( !empty( $fs_unique_id ) ) {
+
+                $listing_from_db        = $this->db->get_row( $this->db->prepare( "SELECT * FROM ".fsdb()->listing." where feedsync_unique_id = '%s'", $fs_unique_id ) );
+                $listing_mod_date       = $item->getAttribute('modTime');
+                $listing_mod_date       = feedsync_format_date( $listing_mod_date );
+
+                if( ( strtotime($listing_mod_date ) > strtotime( $listing_from_db->mod_date ) ) ) {
+                        // Listing mod date is already updated.
+                } else {
+
+                        if( !empty( $listing_from_db ) ) :
+                                
+                                /** Load existing xml from database */
+                                $existing_xml = new DOMDocument('1.0', 'UTF-8');
+                                $existing_xml->preserveWhiteSpace = FALSE;
+                                $existing_xml->recover = TRUE;
+                                $existing_xml->loadXML($listing_from_db->xml);
+                                $existing_xml->formatOutput = TRUE;
+                                $existing_listing = $existing_xml->getElementsByTagName('*');
+                                $existing_listing_item  = $existing_listing->item(0);
+
+                                // existing images
+                                $existing_imgs = $this->get_nodes($existing_listing_item,'img');
+
+                                $existing_img_array = [];
+
+                                if( $existing_imgs->length > 0 ) {
+                        
+                                        foreach ($existing_imgs as $k => $existing_img ) {
+                                                $existing_img_array[ $existing_img->getAttribute('id') ] = $existing_img->getAttribute('url');
+                                        }
+                                }
+
+                                // new images
+                                $new_imgs = $this->get_nodes($item,'img');
+
+                                $new_img_array = [];
+
+                                if( $new_imgs->length > 0 ) {
+                        
+                                        foreach ($new_imgs as $k => $new_img ) {
+                                                $new_img_array[ $new_img->getAttribute('id') ] = $new_img->getAttribute('url');
+                                        }
+                                }
+
+                                if( $existing_img_array !== $new_img_array ) {
+
+                                        $listing_mod_date = date("Y-m-d H:i:s",strtotime($listing_mod_date) + 5 );
+                                        $this->logger_log('Increment mod date by 5 seconds as image order is changed but listing mod date is still same : '.$listing_mod_date );
+                                        $item->setAttribute('modTime', $listing_mod_date );
+                                        
+                                }
+
+                        endif;
+                        //check & update listing mod date if image order is changed so that it doesn't get skipped during import.
+                }
+
         }
 
         return $item;
