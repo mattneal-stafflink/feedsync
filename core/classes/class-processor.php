@@ -165,7 +165,7 @@ class FEEDSYNC_PROCESSOR {
     function get_xmls(){
         $files =  get_files_list(get_path('input'),"xml|XML");
         sort($files);
-        return $files;
+        return apply_filters( 'input_files_list', $files );
     }
 
     /** returns next xml file to process **/
@@ -464,17 +464,31 @@ class FEEDSYNC_PROCESSOR {
      * get address from a listing element
      * @param  [domDocument Object]
      * @param  boolean
+     * @since 3.5 support for new zealand alternate reaxml version.
      * @return [mixed]
      */
     function get_address($item,$comma_seperated = true) {
 
         $address        = $this->get_first_node($item,'address');
 
+        if( '' == $address->getAttribute('display') ) {
+            $address->setAttribute('display', 'yes');
+        }
+
         $this->address['streetnumber']      = $this->get_node_value($address,'streetNumber');
         $this->address['street']            = $this->get_node_value($address,'street');
         $this->address['suburb']            = $this->get_node_value($address,'suburb');
         $this->address['state']             = $this->get_node_value($address,'state');
         $this->address['postcode']          = $this->get_node_value($address,'postcode');
+
+        if( $this->has_node($address,'lotNo') ) {
+            // nz alt version
+            $this->address['streetnumber']      = $this->get_node_value($address,'streetNo');
+            $this->address['street']      = $this->get_node_value($address,'streetName');
+            $this->address['area']      = $this->get_node_value($address,'area');
+            $this->address['region']      = $this->get_node_value($address,'region');
+
+        }
 
         if( $this->has_node($address,'country') ) {
             $this->address['country']        = $this->get_node_value($address,'country');
@@ -492,8 +506,14 @@ class FEEDSYNC_PROCESSOR {
         if( $this->has_node($address,'lotNumber') )
             $this->address['lotNumber']         = $this->get_node_value($address,'lotNumber');
 
+        if( $this->has_node($address,'lotNo') )
+            $this->address['lotNumber']         = $this->get_node_value($address,'lotNo');
+
         if( $this->has_node($address,'subNumber') )
             $this->address['subNumber']         = $this->get_node_value($address,'subNumber');
+
+        if( $this->has_node($address,'unitNo') )
+            $this->address['subNumber']         = $this->get_node_value($address,'unitNo');
 
         if( $this->address['lotNumber'] != '' && $this->address['streetnumber'] != ''){
             $address_string = $this->address['lotNumber'].'/'.$address_string;
@@ -538,13 +558,42 @@ class FEEDSYNC_PROCESSOR {
 
         /** in case or processing missing geocodes $this->xmlFile will be empty and also $this->path */
         if( !empty($this->xmlFile) && !empty($this->path) ) {
-            // Suppress permission deined error
-            @$this->xmlFile->save($this->path);
+
+            if( is_writable( $this->path ) ) {
+                // Suppress permission deined error
+                @$this->xmlFile->save($this->path);
+            }
+            
         }
         $this->logger_log('updated feedsyncGeocode with value : '.$coord);
         // return item for further processing;
         return $item;
 
+    }
+
+    /**
+    * Escape external links, escaping unwanted chars in URL
+    * @since 3.5.0
+    **/
+    function escape_links( $item = null ) {
+
+        $externals = $this->xpath->query('//externalLink[@href]');
+
+        if( !empty($externals) ) {
+            foreach ($externals as $k=>$external ) {
+                $link_url = filter_var( $external->getAttribute('href'), FILTER_SANITIZE_URL );
+                $link_text = filter_var( $external->getAttribute('title'), FILTER_SANITIZE_STRING );
+                
+                if( !empty($link_url) ) {
+                    $externals->item($k)->setAttribute('href', $link_url );
+                }
+
+                if( !empty($link_text) ) {
+                    $externals->item($k)->setAttribute('title', $link_text );
+                }
+            }
+        }
+        return $item;
     }
 
     /**
@@ -557,43 +606,9 @@ class FEEDSYNC_PROCESSOR {
 
         $node_to_add = !empty($this->xmlFile) ? $this->xmlFile : $item;
 
-        $image_mod_date = false;
-
-        /** Feedsync Image Mod Time */
-
-        $imgs = $this->get_nodes($item,'img');
-
-        if( $imgs->length > 0 ) {
-
-            foreach ($imgs as $k=>$img) {
-                $this_mod_date = trim($img->getAttribute('modTime'));
-                if(!empty($this_mod_date)) {
-                    $this_mod_date = feedsync_format_date( $this_mod_date );
-                    if($image_mod_date != false) {
-                        $image_mod_date = strtotime($this_mod_date) >  strtotime($image_mod_date) ? $this_mod_date : $image_mod_date;
-                    } else {
-                        $image_mod_date = $this_mod_date;
-                    }
-                }
-            }
-
-            if($image_mod_date) {
-                if( ! $this->has_node($item,'feedsyncImageModtime') ) {
-                    // if node not already exists, add it
-
-                    $element = $this->add_node($node_to_add,'feedsyncImageModtime',$image_mod_date);
-
-                    $item->appendChild($element);
-                } else {
-                    // if node already exists, just update the value
-                    $item = $this->set_node_value($item,'feedsyncImageModtime',$image_mod_date);
-                }
-
-                $this->logger_log('feedsyncImageModtime processed : '.$image_mod_date);
-            }
-
-        }
-
+        /** process external link */
+        $item = $this->escape_links( $item );
+        
         /** Feedsync Unique ID ( Unique ID + Agent ID ) */
 
         $feedsync_unique_id = $this->get_node_value($item,'uniqueID');
@@ -618,6 +633,87 @@ class FEEDSYNC_PROCESSOR {
         }
 
         $this->logger_log('feedsyncUniqueID processed : '.$feedsync_unique_id);
+
+
+        /** Feedsync Image Mod Time */
+        $image_mod_date = false;
+
+        $imgs = $this->get_nodes($item,'img');
+
+        if( $imgs->length > 0 ) {
+
+            foreach ($imgs as $k=>$img) {
+                $this_mod_date = trim($img->getAttribute('modTime'));
+                if(!empty($this_mod_date)) {
+                    $this_mod_date = feedsync_format_date( $this_mod_date );
+                    if($image_mod_date != false) {
+                        $image_mod_date = strtotime($this_mod_date) >  strtotime($image_mod_date) ? $this_mod_date : $image_mod_date;
+                    } else {
+                        $image_mod_date = $this_mod_date;
+                    }
+                }
+            }
+            
+            if($image_mod_date) {
+                if( ! $this->has_node($item,'feedsyncImageModtime') ) {
+                    // if node not already exists, add it
+
+                    $element = $this->add_node($node_to_add,'feedsyncImageModtime',$image_mod_date);
+
+                    $item->appendChild($element);
+                } else {
+                    // if node already exists, just update the value
+                    $item = $this->set_node_value($item,'feedsyncImageModtime',$image_mod_date);
+                }
+
+                // update listing mod date if not changed & image mod date is greater than listing mod date.
+
+                /** fetch listing **/
+                $fs_unique_id = $this->get_node_value($item,'feedsyncUniqueID');
+                
+                if( !empty( $fs_unique_id ) ) :
+
+                    $listing_from_db = $this->db->get_row( $this->db->prepare( "SELECT * FROM ".fsdb()->listing." where feedsync_unique_id = '%s'", $fs_unique_id ) );
+                    
+                    if( !empty( $listing_from_db ) ) :
+                    /** Load existing xml from database */
+                        $existing_xml = new DOMDocument('1.0', 'UTF-8');
+                        $existing_xml->preserveWhiteSpace = FALSE;
+                        $existing_xml->recover = TRUE;
+                        $existing_xml->loadXML($listing_from_db->xml);
+                        $existing_xml->formatOutput = TRUE;
+                        $existing_listing = $existing_xml->getElementsByTagName('*');
+                        $existing_listing_item  = $existing_listing->item(0);
+                        
+                        if( $this->has_node($existing_listing_item,'feedsyncImageModtime') ) {
+
+                            $db_img_mod_time = $this->get_node_value($existing_listing_item,'feedsyncImageModtime');
+                            $listing_mod_date                               = $item->getAttribute('modTime');
+                            $listing_mod_date                               = feedsync_format_date( $listing_mod_date );
+                            
+                            if( ( strtotime($image_mod_date ) > strtotime( $db_img_mod_time ) ) ) {
+                                
+                                // image mod date has been updated.
+                                // check if listing mod date has been updated or not
+                                if( ( strtotime($listing_mod_date ) > strtotime( $listing_from_db->mod_date ) ) ) {
+                                    // all good. Listing mod date has been updated as well..
+                                } else {
+                                    //update listing mod date so that it doesn't get skipped during import.
+                                    
+                                    $listing_mod_date = date("Y-m-d H:i:s",strtotime($listing_mod_date) + 5 );
+                                    $this->logger_log('Increment mod date by 5 seconds as image mod date is changed but listing mod date is still same : '.$listing_mod_date );
+                                    $item->setAttribute('modTime', $listing_mod_date );
+                                }
+                            
+                            }
+                        }
+                    endif;
+                endif;
+
+                $this->logger_log('feedsyncImageModtime processed : '.$image_mod_date);
+            }
+
+        }
 
         /** Sold Date  */
 
@@ -656,6 +752,20 @@ class FEEDSYNC_PROCESSOR {
             }
 
         }
+        
+        $status         = $item->getAttribute('status');
+
+        $publish_status = $this->get_publish_status($status);
+        
+        // add feedsyncPostStatus if its not there already
+         if( ! $this->has_node($item,'feedsyncPostStatus') ) {
+            $element    = $this->add_node($node_to_add,'feedsyncPostStatus',$publish_status);
+            $item->appendChild($element);
+
+        } else {
+            // if node already exists, just update the value
+            $item = $this->set_node_value($item,'feedsyncPostStatus',$publish_status);
+        }
 
 
         if(!empty($this->xmlFile) ) {
@@ -665,6 +775,69 @@ class FEEDSYNC_PROCESSOR {
         }
 
         return $item;
+    }
+
+    function get_publish_status($status) {
+
+        if( empty($status) )
+            return 'publish';
+
+        $key = 'reaxml_map_status_'.$status;
+        
+        return get_option($key);
+    }
+
+    function process_publish() {
+
+        $alllistings = $this->db->get_results("select * from ".fsdb()->listing." where 1=1 ");
+
+        if( !empty($alllistings) ) {
+
+            foreach($alllistings as $listing) {
+                $this->xmlFile = new DOMDocument('1.0', 'UTF-8');
+                $this->xmlFile->preserveWhiteSpace = FALSE;
+                $this->xmlFile->loadXML($listing->xml);
+                $this->xmlFile->formatOutput = TRUE;
+                $this->xpath = new DOMXPath($this->xmlFile);
+                $listingXml     = $this->epl_nodes($this->xmlFile->documentElement);
+                $newxml         = $this->xmlFile->saveXML($this->xmlFile->documentElement);
+
+                $db_data   = array(
+                    'xml'       =>  $newxml,
+                );
+
+                $db_data    =   array_map(array($this->db,'escape'), $db_data);
+                $query = "UPDATE ".fsdb()->listing." SET
+                                xml             = '{$db_data['xml']}'
+                                WHERE id        = '{$listing->id}'
+                            ";
+
+               $this->db->query($query);
+            }
+            update_option('reaxml_publish_processed', 'yes');
+            die(
+                json_encode(
+                    array(
+                        'status'    =>  'success',
+                        'message'   =>  'Status process completed, listing processing will follow...',
+                        'buffer'    =>  'processing'
+                    )
+                )
+            );
+
+        }  else {
+
+            update_option('reaxml_publish_processed', 'yes');
+            die(
+                json_encode(
+                    array(
+                        'status'    =>  'success',
+                        'message'   =>  'Status process completed, listing processing will follow...',
+                        'buffer'    =>  'processing'
+                    )
+                )
+            );
+        }
     }
 
     /**
@@ -869,6 +1042,8 @@ class FEEDSYNC_PROCESSOR {
      * attempts to fetch geocode from geocode node, if present
      * @param  [domDocument Object]
      * @return [domDocument Object]
+     * 
+     * @since 3.4.5 Fixed : Use google geocode if no geo fields in extra fields.
      */
     function geocode_from_extrafields_node($item){
 
@@ -902,6 +1077,8 @@ class FEEDSYNC_PROCESSOR {
             $this->logger_log('Geocoded from extraFields node : '.$this->coord);
 
             return $this->update_feedsync_node($item,$this->coord);
+        } else {
+            $item = $this->geocode_from_google($item);
         }
 
 
@@ -1062,6 +1239,88 @@ class FEEDSYNC_PROCESSOR {
                     array(
                         'status'    =>  'success',
                         'message'   =>  'Geocode process complete',
+                        'buffer'    =>  'complete'
+                    )
+                )
+            );
+        }
+    }
+
+    /**
+     * Regenerate coordinates for listing.
+     * @return json mixed
+     * @since 3.4.0
+     */
+    function switch_status() {
+
+        $id         = intval($_POST['id']);
+        $new_status = filter_var($_POST['status'], FILTER_SANITIZE_STRING);
+
+        if($id <= 0)
+            return;
+
+        if( empty($new_status) )
+            return;
+
+        $alllistings = fsdb()->get_results("select * from ".fsdb()->listing." where id = {$id} ");
+
+        if( !empty($alllistings) ) {
+
+            foreach($alllistings as $listing) {
+
+                $this->xmlFile = new DOMDocument('1.0', 'UTF-8');
+                $this->xmlFile->preserveWhiteSpace = FALSE;
+                $this->xmlFile->loadXML($listing->xml);
+                $this->xmlFile->formatOutput = TRUE;
+                $this->xpath    = new DOMXPath($this->xmlFile);
+                $this->xmlFile->documentElement->setAttribute('status', $new_status );
+                
+                $mod_date = date("Y-m-d H:i:s",strtotime($listing->mod_date) + 5 );
+                $this->xmlFile->documentElement->setAttribute('modTime', $mod_date );
+                $newxml         = $this->xmlFile->saveXML($this->xmlFile->documentElement);
+
+                $db_data   = array(
+                    'xml'       =>  $newxml,
+                    'status'    =>  $new_status,
+                    'mod_date'  =>  $mod_date
+                );
+
+                $db_data    =   array_map(array($this->db,'escape'), $db_data);
+                $query = "UPDATE ".fsdb()->listing." SET
+                                xml             = '{$db_data['xml']}',
+                                status         = '{$db_data['status']}',
+                                mod_date        = '{$db_data['mod_date']}'
+                                WHERE id        = '{$listing->id}'
+                            ";
+                
+
+                if( $this->db->query($query) ) {
+                    $query_status = json_encode(
+                        array(
+                            'status'        =>  'success',
+                            'buffer'        =>  'complete'
+                        )
+                    );
+                } else {
+                    $query_status = json_encode(
+                        array(
+                            'status'        =>  'fail',
+                            'buffer'        =>  'complete'
+                        )
+                    );
+                }
+
+                die($query_status);
+
+            }
+
+        }  else {
+
+            die(
+                json_encode(
+                    array(
+                        'status'    =>  'success',
+                        'message'   =>  'Status Changed successfully',
                         'buffer'    =>  'complete'
                     )
                 )
@@ -1640,7 +1899,7 @@ class FEEDSYNC_PROCESSOR {
         $db_data['mod_date']                    = feedsync_format_date( $mod_date );
         $db_data['firstdate']                    = $this->convert_time_to_timezone( $db_data['mod_date'], get_option('feedsync_timezone') );
 
-        $db_data['status']                      = $item->getAttribute('status');
+        $db_data['status']                      = strtolower($item->getAttribute('status'));
         $db_data['xml']                         = $this->xmlFile->saveXML( $item);
         $db_data['xml']                         = $db_data['xml'];
         $db_data['geocode']                     = $this->get_node_value($item,'feedsyncGeocode');
@@ -1666,7 +1925,7 @@ class FEEDSYNC_PROCESSOR {
 
     function logger_log($msg) {
 
-        if( is_logging_enabled() ) {
+        if( is_logging_enabled() && !is_null($this->logger) ) {
             $this->logger->log($msg);
         }
     }
@@ -1717,6 +1976,9 @@ class FEEDSYNC_PROCESSOR {
         }
     }
 
+    /**
+     * @since build number : 20-1020, changed extension of log file to txt.
+     */
     function init_log($file = '') {
 
         if( !is_logging_enabled() )
@@ -1734,7 +1996,7 @@ class FEEDSYNC_PROCESSOR {
             $file = basename($this->path);
         }
 
-        $log_file = generate_uuid().'.log';
+        $log_file = generate_uuid().'.txt';
 
         $log_file_path = get_path('logs').$log_file;
 
@@ -1788,8 +2050,59 @@ class FEEDSYNC_PROCESSOR {
     }
 
     /**
+     * Move processed file from input to processed/{year}/{month} folder.
+     *
+     * @param      string  $path   path
+     *
+     * @return     bool  true if file moved successfully.
+     * @since      3.5
+     */
+    function move_processed_file( $path ) {
+
+        $name = basename($this->path);
+        $abs_path = $this->get_path('processed');
+
+        $year = date('Y');
+        $month = date('m');
+
+        $full_year_path     = $abs_path.DS.$year;
+        $full_month_path    = $full_year_path.DS.$month.DS;
+
+
+        // make sure year & month folder exists.
+        if ( !file_exists( $full_year_path ) || !file_exists( $full_month_path ) ) {
+
+            if( defined( 'FEEDSYNC_FOLDER_PERMISSIONS') ) {
+                $permissions = FEEDSYNC_FOLDER_PERMISSIONS;
+            }
+        
+            if( empty( $permissions ) ) {
+                $permissions = 0755;
+            }
+        
+            $paths = array( $full_year_path, $full_month_path );
+        
+            foreach($paths as $single_path) {
+        
+                if ( !file_exists( $single_path ) ) {
+                    @mkdir($single_path, $permissions, true);
+        
+                } else {
+                    @chmod($single_path, $permissions );
+        
+                }
+            }
+            
+        }
+
+        return @rename( $path, $full_month_path.$name );
+        
+    }
+
+    /**
      * Import listings to database
      * @return json
+     * @since 3.5 fix the issue with < & > in existing listing in db.
      */
     function import(){
 
@@ -1839,7 +2152,7 @@ class FEEDSYNC_PROCESSOR {
                     $this->logger_log('Duplicate listing detected with ID : '.$exists->id);
 
                     /** update if we have updated data **/
-                    if(  strtotime($exists->mod_date) < strtotime($db_data['mod_date']) ) {
+                    if(  strtotime($exists->mod_date) <= strtotime($db_data['mod_date']) ) {
 
                         $this->logger_log('Updated content detected. New Mode Time : '.$db_data['mod_date'].'. Old Mode Time : '.$exists->mod_date);
 
@@ -1904,9 +2217,11 @@ class FEEDSYNC_PROCESSOR {
                             $this->logger_log('Address missing, skip updating whole xml');
 
                             $existing_xml = new DOMDocument('1.0', 'UTF-8');
+                            libxml_use_internal_errors(true);
                             $existing_xml->preserveWhiteSpace = FALSE;
                             $exists->xml = html_entity_decode($exists->xml, ENT_QUOTES | ENT_HTML5);
                             $exists->xml = preg_replace('/&(?!#?[a-z0-9]+;)/', '&amp;', $exists->xml);
+                            $existing_xml->recover = TRUE;
                             $existing_xml->loadXML( $exists->xml );
                             $existing_xml->formatOutput = TRUE;
                             $existing_listing = $existing_xml->getElementsByTagName('*');
@@ -1961,7 +2276,7 @@ class FEEDSYNC_PROCESSOR {
         $this->logger_log('---- File processing complete ----');
 
         try {
-            if( rename($this->path,$this->get_path('processed').basename($this->path) ) ) {
+            if( file_exists( $this->path ) && $this->move_processed_file( $this->path ) ) {
 
                 $this->logger_log('---- File successfully moved to processed folder ----');
                 $this->complete_log();

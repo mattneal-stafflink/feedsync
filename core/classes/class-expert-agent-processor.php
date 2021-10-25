@@ -12,9 +12,11 @@ class Expert_Agent_PROCESSOR extends FEEDSYNC_PROCESSOR {
     /**
      * parses dom elements to be procesessed in file
      * @return [type]
+     * 
+     * @since 3.4.6 : fix to pull property nodes document wide instead of child nodes of 1st properties node.
      */
     function dom_elements() {
-        $this->elements = $this->get_first_node($this->xmlFile,'properties');
+        $this->elements = $this->get_nodes( $this->xmlFile,'property' );
         $this->item     = current($this->elements);
     }
 
@@ -196,7 +198,8 @@ class Expert_Agent_PROCESSOR extends FEEDSYNC_PROCESSOR {
         $mod_date                      = date("Y-m-d-H:i:s");
         $db_data['mod_date']           = feedsync_format_date( $mod_date );
         $db_data['firstdate']          = $this->convert_time_to_timezone( $db_data['mod_date'], get_option('feedsync_timezone') );
-        $db_data['status']             = $this->get_node_value($item,'priority');
+        $status                        = $this->get_node_value($item,'priority');
+        $db_data['status']             = $this->expert_agent_property_status( $status,$item );
         $db_data['geocode']            = $this->get_node_value($item,'feedsyncGeocode');
         $db_data['street']             = $this->get_node_value($item,'street');
         $db_data['suburb']             = $this->get_node_value($item,'town');
@@ -208,6 +211,30 @@ class Expert_Agent_PROCESSOR extends FEEDSYNC_PROCESSOR {
         $db_data['xml']                = $this->xmlFile->saveXML( $item);
         return $db_data;
 
+    }
+
+    public function expert_agent_property_status($status,$item) {
+        
+        $defaults = array(
+            'Available to Let' 	=>  'current',
+            'Let STC' 	        =>  'leased',
+            'Sold STC' 	        =>  'sold',
+            'On Market' 	    => 'current',
+            'Exchanged' 	    =>  'sold',
+            'Under Offer' 	    =>  'current',
+            'Under Negotiation' =>  'current'
+        );
+
+        $status = isset($defaults[$status]) ? $defaults[$status] : $status;
+        if ( !$this->has_node($item,'feedsync_status') ) {
+
+            $fss   = $this->add_node($this->xmlFile,'feedsync_status', $status );
+            $item->appendChild($fss);
+
+        } else {
+            $this->set_node_value( $item, 'feedsync_status', $status );
+        }
+        return  strtolower($status);
     }
 
     /**
@@ -310,6 +337,25 @@ class Expert_Agent_PROCESSOR extends FEEDSYNC_PROCESSOR {
         }
 
         $this->logger_log('feedsyncUniqueID processed : '.$feedsync_unique_id);
+
+        $status = $this->get_node_value($item,'priority');
+        $status = $this->expert_agent_property_status($status,$item);
+
+        if( 'delete' === $status ) {
+            $publish_status = 'trash';
+        } else {
+            $publish_status = $this->get_publish_status($status);
+        }
+        
+         // add feedsyncPostStatus if its not there already
+         if( ! $this->has_node($item,'feedsyncPostStatus') ) {
+            $element    = $this->add_node($node_to_add,'feedsyncPostStatus',$publish_status);
+            $item->appendChild($element);
+
+        } else {
+            // if node already exists, just update the value
+            $item = $this->set_node_value($item,'feedsyncPostStatus',$publish_status);
+        }
 
         if(!empty($this->xmlFile) ) {
             $this->xmlFile->save($this->path);
@@ -439,8 +485,7 @@ class Expert_Agent_PROCESSOR extends FEEDSYNC_PROCESSOR {
 
         $this->logger_log('==== File processing Initiated  : '.basename($this->path).' ===='.PHP_EOL);
 
-        foreach($this->elements->childNodes as $item) {
-
+        foreach($this->elements as $item) {
             if( isset($item->tagName) && !is_null($item->tagName) ) {
 
                 /** process geocode **/
@@ -525,7 +570,7 @@ class Expert_Agent_PROCESSOR extends FEEDSYNC_PROCESSOR {
         $this->logger_log('---- File processing complete ----');
         $this->expert_agent_post_import($processed_ids);
         try {
-            if( rename($this->path,$this->get_path('processed').basename($this->path) ) ) {
+            if( $this->move_processed_file( $this->path ) ) {
 
                 $this->logger_log('---- File successfully moved to processed folder ----');
                 $this->complete_log();

@@ -9,10 +9,10 @@
  * The program will process the input files and store them in a database on your server. The output is generated on the fly
  * as requested by your import software.
  * Author: Merv Barrett
- * Author URI: http://realestateconnected.com.au/
- * Version: 3.4
+ * Author URI: https://realestateconnected.com.au/
+ * Version: 3.5.1
  *
- * Copyright 2020 Merv Barrett
+ * Copyright 2021 Merv Barrett
  *
  * FeedSync is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License, version 2, as

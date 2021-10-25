@@ -23,18 +23,21 @@ function setup_environment() {
 add_action('init','setup_environment',5);
 
 function make_current_url() {
-    return sprintf(
+    $url =  sprintf(
         "%s://%s%s",
         isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] != 'off' ? 'https' : 'http',
         $_SERVER['SERVER_NAME'],
         $_SERVER['REQUEST_URI']
     );
+    $url = strtok( $url, '?' );
+    return trailingslashit( $url );
 }
 
 /**
  * Set default settings to DB on new installation.
  * 
  * @since 3.4.4 is_request_available set to yes for fresh installs.
+ * @since 3.4.5 feedsync_access_key is set during installation.
  */
 function set_default_settings() {
 
@@ -90,7 +93,14 @@ function set_default_settings() {
         'feedsync_license_url'          =>  get_option('site_url'),
         'feedsync_max_logs'             =>  '1000',
         'feedsync_enable_logging'       =>  'on',
-        'is_request_available'          =>  'yes'
+        'is_request_available'          =>  'yes',
+        'reaxml_map_status_current'     =>  'publish',
+        'reaxml_map_status_leased'      =>  'publish',
+        'reaxml_map_status_sold'        =>  'publish',
+        'reaxml_map_status_withdrawn'   =>  'private',
+        'reaxml_map_status_offmarket'   =>  'draft',
+        'reaxml_map_status_deleted'     =>  'trash',
+        'feedsync_access_key'           =>  uniqid()
     );
 
     foreach($default_opts as $default_opt_key => $default_opt) {
@@ -108,69 +118,23 @@ function set_default_settings() {
  * @return void
  *
  * @since 3.4.0 Added check for missing fields in agents table
+ * @since 3.4.5 Refactored code : Using FEEDSYNC_TABLES class for all tables functions.
  */
 function init_db_connection() {
 
-    foreach(fsdb()->tables as $required_table) {
-        $required_table = fsdb()->{$required_table};
-        $exists = fsdb()->get_results('show tables like "'.$required_table.'" ');
-        if( is_null($exists) || empty($exists) )  {
+    $fs_tables = new FEEDSYNC_TABLES();
 
-            create_table();
+    $fs_tables->init_tables();
+    $fs_tables->upgrade_listing_table();
+    $fs_tables->upgrade_agent_table();
 
-            if( is_home() && get_option('site_url') == '' ) {
-                update_option('site_url', make_current_url() );
-            }
-
-            break;
-        }
-    }
-
-    $sql = "SELECT *
-                FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE table_name = '".fsdb()->listing."'
-                AND table_schema = '".DB_NAME."'
-                AND column_name = 'street'";
-
-    $col_exists = fsdb()->get_results($sql);
-
-    if( empty($col_exists) ) {
-        upgrade_tables();
-    }
-
-    /** Check & ALter Table : fsdb()->agent */
-
-    $sql = "SELECT *
-            FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE table_name = '".fsdb()->agent."'
-            AND table_schema = '".DB_NAME."'
-            AND column_name = 'listing_agent_id'";
-
-    $col_exists = fsdb()->get_results($sql);
-
-    if( empty($col_exists) ) {
-
-        /** add missing columns **/
-        $sql = "
-                ALTER TABLE `".fsdb()->agent."`
-                    ADD `listing_agent_id` varchar(256) NOT NULL,
-                    ADD `username` varchar(256) NOT NULL;
-            ";
-        fsdb()->query($sql);
-
-    }
-
-    $option_exist = fsdb()->query("SELECT * FROM ".fsdb()->options." WHERE option_name = 'option' ");
-    if($option_exist) {
-        // upgrade the option
-       upgrade_options();
-       // store site url
-       if( is_home() && get_option('site_url') == '' ) {
-            update_option('site_url', make_current_url() );
-        }
-    }
+    upgrade_options();
 
     fsdb()->show_errors = false;
+
+    if( is_home() && get_option('site_url') == '' ) {
+        update_option('site_url', make_current_url() );
+    }
 }
 
 /*
@@ -180,6 +144,7 @@ add_action('init_db','init_db_connection');
 do_action('init_db');
 do_action('init_options');
 do_action('init_url_constants');
+do_action('init_session');
 
 /** set default settings */
 set_default_settings();
@@ -190,10 +155,43 @@ set_default_settings();
  */
 add_action('feedsync_form_feedsync_settings','save_feedsync_settings');
 
+function feedsync_save_changed_status( $data ) {
+    
+    $mappings = [
+        'reaxml_map_status_current'     =>  'publish',
+        'reaxml_map_status_leased'      =>  'publish',
+        'reaxml_map_status_sold'        =>  'publish',
+        'reaxml_map_status_withdrawn'   =>  'private',
+        'reaxml_map_status_offmarket'   =>  'draft',
+        'reaxml_map_status_deleted'     =>  'trash'
+    ];
+
+    $diff = [];
+    
+    foreach( $mappings as $status =>    $value ) {
+
+        $map = get_option( $status );
+        
+        if( empty( $map ) ) {
+            $map = $value;
+        }
+        
+        if( $data[ $status ] != $map ) {
+            $diff[ $status ] = $data[ $status ];
+        }
+        
+    }
+    
+    if( !empty( $diff ) ) {
+        update_option('reaxml_publish_processed', 'no');
+    }
+}
+
 function save_feedsync_settings() {
 
 
     $data  = filter_input_array(INPUT_POST, FILTER_SANITIZE_STRING);
+    feedsync_save_changed_status( $data );
     if( !empty($data) ) {
         foreach($data as $key => $value) {
             update_option($key,$value);
@@ -501,7 +499,8 @@ function enqueue_js($js = array() ) {
     if( !empty ($js) ) {
         foreach($js as $file) {
             $prefix = is_absolute_url($file) ? '' : JS_URL;
-            echo '<script type="text/javascript" src="'.$prefix.$file.'?version='.$js_version.'" ></script>';
+            $version_string = is_absolute_url($file) ? '' : '?version='.$js_version;
+            echo '<script type="text/javascript" src="'.$prefix.$file.$version_string.'" ></script>';
         }
     }
 }
@@ -523,7 +522,6 @@ function is_absolute_url($url) {
 function get_error_html($error='') {
     return '
             <div class="alert alert-danger" role="alert">
-              <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
               <span class="sr-only">Error:</span>
               '.$error.'
             </div>
@@ -538,152 +536,19 @@ function get_error_html($error='') {
 function get_success_html($msg='') {
     return '
             <div class="alert alert-success" role="alert">
-              <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
               <span class="sr-only">Error:</span>
               '.$msg.'
             </div>
         ';
 }
 
-/**
- * Creates table on first install
- * @return [type] [description]
- */
-function create_table() {
-
-    $charset_collate = get_charset_collate();
-
-    $sql = 'CREATE TABLE IF NOT EXISTS `'.fsdb()->listing.'` (
-                  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-                  `unique_id` varchar(120) NOT NULL,
-                  `feedsync_unique_id` varchar(120) NOT NULL,
-                  `agent_id` varchar(128) NOT NULL,
-                  `mod_date` varchar(28) NOT NULL,
-                  `type` varchar(28) NOT NULL,
-                  `status` varchar(28) NOT NULL,
-                  `xml` longtext NOT NULL,
-                  `firstdate` varchar(28) NOT NULL,
-                  `geocode` varchar(50) NOT NULL,
-                  `street` varchar(256) NOT NULL,
-                  `suburb` varchar(256) NOT NULL,
-                  `state` varchar(256) NOT NULL,
-                  `postcode` varchar(256) NOT NULL,
-                  `country` varchar(256) NOT NULL,
-                  `address` varchar(512) NOT NULL,
-                  PRIMARY KEY (`id`)
-                ) '.$charset_collate.'; ';
-
-    fsdb()->query($sql);
-
-    $sql = '
-            CREATE TABLE IF NOT EXISTS `'.fsdb()->listing_meta.'` (
-                `id` bigint(20) NOT NULL AUTO_INCREMENT,
-                `listing_id` bigint(20) NOT NULL,
-                `meta_key` varchar(191) NOT NULL,
-                `meta_value` longtext NOT NULL,
-              PRIMARY KEY (`id`)
-            ) '.$charset_collate.';
-
-    ';
-
-    fsdb()->query($sql);
-
-    $sql = '
-                CREATE TABLE IF NOT EXISTS `'.fsdb()->agent.'` (
-                   `id` bigint(20) NOT NULL AUTO_INCREMENT,
-                  `office_id` varchar(128) NOT NULL,
-                  `name` varchar(128) NOT NULL,
-                  `telephone` varchar(128) NOT NULL,
-                  `email` varchar(128) NOT NULL,
-                   `xml` text NOT NULL,
-                   `listing_agent_id` varchar(256) NOT NULL,
-                   `username` varchar(256) NOT NULL,
-                  PRIMARY KEY (`id`),
-                  UNIQUE KEY `name` (`name`)
-                ) '.$charset_collate.';
-
-        ';
-
-
-    fsdb()->query($sql);
-
-    $sql = '
-            CREATE TABLE IF NOT EXISTS `'.fsdb()->agent_meta.'` (
-                `id` bigint(20) NOT NULL AUTO_INCREMENT,
-                `agent_id` bigint(20) NOT NULL,
-                `meta_key` varchar(191) NOT NULL,
-                `meta_value` longtext NOT NULL,
-              PRIMARY KEY (`id`)
-            ) '.$charset_collate.';
-
-    ';
-
-    fsdb()->query($sql);
-
-    $sql = '
-            CREATE TABLE IF NOT EXISTS `'.fsdb()->options.'` (
-                `option_id` bigint(20) NOT NULL AUTO_INCREMENT,
-                `option_name` varchar(191) NOT NULL,
-                `option_value` longtext NOT NULL,
-              PRIMARY KEY (`option_id`)
-            ) '.$charset_collate.';
-
-    ';
-
-    fsdb()->query($sql);
-
-    $sql = '
-            CREATE TABLE IF NOT EXISTS `'.fsdb()->temp.'` (
-                `id` bigint(20) NOT NULL AUTO_INCREMENT,
-                `unique_id` varchar(191) NOT NULL,
-                `mod_date` varchar(28) NOT NULL,
-                `value` longtext NOT NULL,
-              PRIMARY KEY (`id`),
-              UNIQUE KEY `unique_id` (`unique_id`)
-            ) '.$charset_collate.';
-
-    ';
-
-    fsdb()->query($sql);
-
-    $sql = '
-            CREATE TABLE IF NOT EXISTS `'.fsdb()->logs.'` (
-              `id` bigint(20) NOT NULL AUTO_INCREMENT,
-              `file_name` varchar(256) NOT NULL,
-              `action` varchar(256) NOT NULL,
-              `status` varchar(256) NOT NULL,
-              `summary` longtext NOT NULL,
-              `log_file` varchar(256) NOT NULL,
-              PRIMARY KEY (`id`)
-            ) '.$charset_collate.';
-    ';
-    fsdb()->query($sql);
-
-}
-
-/**
- * Upgrades table on upgradation from lower to higher version
- * @return [type] [description]
- */
-function upgrade_tables() {
-
-    /** add columns in case of upgrade to this version **/
-    $sql = "
-            ALTER TABLE `".fsdb()->listing."`
-                ADD `agent_id` varchar(256) NOT NULL,
-                ADD `street` varchar(256) NOT NULL,
-                ADD `suburb` varchar(256) NOT NULL,
-                ADD `state` varchar(256) NOT NULL,
-                ADD `postcode` varchar(256) NOT NULL,
-                ADD `country` varchar(256) NOT NULL;
-        ";
-    fsdb()->query($sql);
-
-}
-
 function upgrade_options() {
 
+    $option_exist = fsdb()->query("SELECT * FROM ".fsdb()->options." WHERE option_name = 'option' ");
 
+    if( !$option_exist ) {
+        return;
+    }
 
     $data = fsdb()->get_row("SELECT * FROM ".fsdb()->options." WHERE option_name = 'option' ");
     $data = !empty($data) ? unserialize($data->option_value) : array() ;
@@ -704,15 +569,32 @@ function upgrade_options() {
  */
 function check_folders_existance() {
 
+    $permissions = '';
+
+    /**
+     * To overwrite folder permission define this constant in config.php
+     * 
+     * Example :
+     * 
+     * define( 'FEEDSYNC_FOLDER_PERMISSIONS', 0775 );
+     */
+    if( defined( 'FEEDSYNC_FOLDER_PERMISSIONS') ) {
+        $permissions = FEEDSYNC_FOLDER_PERMISSIONS;
+    }
+
+    if( empty( $permissions ) ) {
+        $permissions = 0755;
+    }
+
     $paths = array(INPUT_PATH,OUTPUT_PATH,IMAGES_PATH,PROCESSED_PATH,ZIP_PATH,TEMP_PATH,LOG_PATH,UPGRADE_PATH,LOGS_FOLDER_PATH);
 
     foreach($paths as $path) {
 
         if (!file_exists($path) ) {
-            @mkdir($path, 0755, true);
+            @mkdir($path, $permissions, true);
 
         } else {
-            @chmod($path, 0755);
+            @chmod($path, $permissions );
 
         }
     }
@@ -747,44 +629,44 @@ add_action('ajax_upgrade_table_data','upgrade_table_data');
  */
 function feedsync_manual_processing_buttons() {
 
-	if( is_reset_enabled() ) :
-		$reset_tooltip = 'This will delete all listing data in FeedSync and cannot be undone';
-		echo "<input data-toggle='tooltip' data-html='true' type='button' title='$reset_tooltip' class='btn btn-info pull-right' value='Reset Feedsync' id='reset_feedsync'>";
-	endif;
+    if( is_reset_enabled() ) :
+        $reset_tooltip = 'This will delete all listing data in FeedSync and cannot be undone';
+        echo "<input data-toggle='tooltip' data-html='true' type='button' title='$reset_tooltip' class='btn btn-info pull-right' value='Reset Feedsync' id='reset_feedsync'>";
+    endif;
 
-	$geocode_button_style       = '';
-	$geocode_button_label       = 'Process Missing Coordinates';
-	$tooltip                    = 'Process lat/long coordinates for any listings that have missing coordinates';
-
-	// Force Geocode Processing Button Warning.
-	if ( 'on' === get_option( 'force_geocode' ) ) {
-		$geocode_button_style       = 'btn-danger';
-		$geocode_button_label       = 'Delete and Process all coordinates';
-		$tooltip                    = 'This will delete & re-process lat/long coordinates for all your listings. Only use this if your listings coordinates are incorrect';
-	}
+    $geocode_button_style       = '';
+    $geocode_button_label       = 'Process Missing Coordinates';
+    $tooltip                    = 'Process lat/long coordinates for any listings that have missing coordinates';
+    $db_upgrade_tooltip         = 'Perform a one time database upgrade';
+    // Force Geocode Processing Button Warning.
+    if ( 'on' === get_option( 'force_geocode' ) ) {
+        $geocode_button_style       = 'btn-danger';
+        $geocode_button_label       = 'Delete and Process all coordinates';
+        $tooltip                    = 'This will delete & re-process lat/long coordinates for all your listings. Only use this if your listings coordinates are incorrect';
+    }
 
     if( get_option('feedsync_google_api_key') != '' ) {
         echo "<input data-toggle='tooltip' data-html='true' title='$tooltip' data-placement='top' type='button' class='btn $geocode_button_style btn-info pull-right' value='$geocode_button_label' id='process_missing_coordinates'>";
     }
-	
+    
 
-	$agent_tooltip = 'Process all listings for missing agent details';
-	echo "<input data-toggle='tooltip' data-html='true' type='button' title='$agent_tooltip' class='btn btn-info pull-right' value='Process Listing Agents' id='process_missing_listing_agents'>";
+    $agent_tooltip = 'Process all listings for missing agent details';
+    echo "<input data-toggle='tooltip' data-html='true' type='button' title='$agent_tooltip' class='btn btn-info pull-right' value='Process Listing Agents' id='process_missing_listing_agents'>";
 
-	if( feedsync_upgrade_required() ):
-		echo "<input data-toggle='tooltip' data-html='true' type='button' title='$tooltip' class='btn btn-info pull-right' value='Database Upgrade' id='upgrade_table_data'>";
-	endif;
-	?>
+    if( feedsync_upgrade_required() ):
+        echo "<input data-toggle='tooltip' data-html='true' type='button' title='$db_upgrade_tooltip' class='btn btn-info pull-right' value='Database Upgrade' id='upgrade_table_data'>";
+    endif;
+    ?>
 
-	<?php if( is_reset_enabled() ) : ?>
-		<div class="feedsync-reset-wrap">
-		<div class="alert alert-danger">
-		    <p>Please continue only if you know what you are doing. <b>This process cannot be undone</b>.</p>
-		</div>
-			<input class="reset_confirm_pass" id="reset_confirm_pass" placeholder="Enter admin password" type="text">
-			<input class="btn btn-info pull-right" value="Confirm Reset" id="confirm_table_reset" type="button">
-		</div> <?php
-	endif;
+    <?php if( is_reset_enabled() ) : ?>
+        <div class="feedsync-reset-wrap">
+        <div class="alert alert-danger">
+            <p>Please continue only if you know what you are doing. <b>This process cannot be undone</b>.</p>
+        </div>
+            <input class="reset_confirm_pass" id="reset_confirm_pass" placeholder="Enter admin password" type="text">
+            <input class="btn btn-info pull-right" value="Confirm Reset" id="confirm_table_reset" type="button">
+        </div> <?php
+    endif;
 }
 
 function update_option_data($name='',$data) {
@@ -805,7 +687,6 @@ function update_option_data($name='',$data) {
 }
 
 function get_option_data($name) {
-
     $query = "SELECT * FROM ".fsdb()->options." WHERE option_name = '{$name}' ";
     $data = fsdb()->get_row($query);
     return !empty($data) ? unserialize($data->option_value) : array() ;
@@ -1022,7 +903,6 @@ function feedsync_show_extension_errors() {
         'zip',
         'curl',
         'iconv',
-        'gettext',
         'allow_url_fopen',
         'ftp',
         'dom',
@@ -1043,13 +923,13 @@ function feedsync_show_extension_errors() {
     }
 
     if ( ! empty( $disabled ) ) {
-	$disabled_uppercase = array_map( 'strtoupper', $disabled );
-	add_sitewide_notices( '<strong>'.implode(', ', $disabled_uppercase ).'</strong> PHP Modules are required for FeedSync to work properly, contact your hosting provider to enable them.', 'danger' );
+    $disabled_uppercase = array_map( 'strtoupper', $disabled );
+    add_sitewide_notices( '<strong>'.implode(', ', $disabled_uppercase ).'</strong> PHP Modules are required for FeedSync to work properly, contact your hosting provider to enable them.', 'danger' );
 
-	// Special iconv notice.
-	if ( in_array( 'iconv' , $disabled )) {
-		add_sitewide_notices( '<strong>NOTICE:</strong> NOTICE: Without <strong>ICONV</strong> enabled FeedSync is running in compatibility mode and special characters in the listing data is not able to be converted to html characters.', 'warning' );
-	}
+    // Special iconv notice.
+    if ( in_array( 'iconv' , $disabled )) {
+        add_sitewide_notices( '<strong>NOTICE:</strong> NOTICE: Without <strong>ICONV</strong> enabled FeedSync is running in compatibility mode and special characters in the listing data is not able to be converted to html characters.', 'warning' );
+    }
 
     }
 
@@ -1211,95 +1091,7 @@ function init_charset() {
         $charset = DB_CHARSET;
     }
 
-    return determine_charset( $charset, $collate );
-}
-
-/**
- * Determines the best charset and collation to use given a charset and collation.
- *
- * For example, when able, utf8mb4 should be used instead of utf8.
- *
- * @param string $charset The character set to check.
- * @param string $collate The collation to check.
- * @return array The most appropriate character set and collation to use.
- */
-function determine_charset( $charset, $collate ) {
-
-
-
-    if ( empty( fsdb()->dbh ) ) {
-        return compact( 'charset', 'collate' );
-    }
-
-    if ( 'utf8' === $charset && db_supports( 'utf8mb4' ) ) {
-        $charset = 'utf8mb4';
-    }
-
-    if ( 'utf8mb4' === $charset && ! db_supports( 'utf8mb4' ) ) {
-        $charset = 'utf8';
-        $collate = str_replace( 'utf8mb4_', 'utf8_', $collate );
-    }
-
-    if ( 'utf8mb4' === $charset ) {
-        // _general_ is outdated, so we can upgrade it to _unicode_, instead.
-        if ( ! $collate || 'utf8_general_ci' === $collate ) {
-            $collate = 'utf8mb4_unicode_ci';
-        } else {
-            $collate = str_replace( 'utf8_', 'utf8mb4_', $collate );
-        }
-    }
-
-    // _unicode_520_ is a better collation, we should use that when it's available.
-    if ( db_supports( 'utf8mb4_520' ) && 'utf8mb4_unicode_ci' === $collate ) {
-        $collate = 'utf8mb4_unicode_520_ci';
-    }
-
-    return compact( 'charset', 'collate' );
-}
-
-/**
- * Sets the connection's character set.
- *
- * @param resource $dbh     The resource given by mysql_connect
- * @param string   $charset Optional. The character set. Default null.
- * @param string   $collate Optional. The collation. Default null.
- */
-function set_charset( $dbh, $charset = null, $collate = null ) {
-
-    $charset_collate = init_charset();
-
-    if ( ! isset( $charset ) )
-        $charset = $charset_collate['charset'];
-
-    if ( ! isset( $collate ) )
-        $collate = $charset_collate['collate'];
-
-    if ( db_supports( 'collation' ) && ! empty( $charset ) ) {
-        $set_charset_succeeded = true;
-
-        if ( function_exists( 'mysqli_set_charset' ) && db_supports( 'set_charset' ) ) {
-            $set_charset_succeeded = mysqli_set_charset( $dbh, $charset );
-        }
-
-        if ( $set_charset_succeeded ) {
-            $query = "SET NAMES '".$charset."' ";
-            if ( ! empty( $collate ) )
-                $query .= " COLLATE '".$collate."' ";
-            mysqli_query( $dbh, $query );
-        }
-    }
-}
-
-function get_charset_collate() {
-
-    $charset_collate = init_charset();
-    $query = '';
-    if ( ! empty( $charset_collate['charset'] ) )
-        $query = "DEFAULT CHARACTER SET ".$charset_collate['charset'];
-    if ( ! empty( $charset_collate['collate'] ) )
-        $query .= " COLLATE ".$charset_collate['collate'];
-
-    return $query;
+    return fsdb()->determine_charset( $charset, $collate );
 }
 
 /**
@@ -1331,3 +1123,27 @@ function fix_charset_collate() {
 }
 
 add_action('init','fix_charset_collate',15);
+
+/**
+ * Return string without trailing slash
+ *
+ * @param      string  $string  The string
+ *
+ * @return     string  without trailing slash.
+ * @since      3.4.5 
+ */
+function untrailingslashit( $string ) {
+    return rtrim( $string, '/\\' );
+}
+
+/**
+ * Return string with trailing slash
+ *
+ * @param      string  $string  The string
+ *
+ * @return     string  with trailing slash.
+ * @since      3.4.5
+ */
+function trailingslashit( $string ) {
+    return untrailingslashit( $string ) . '/';
+}

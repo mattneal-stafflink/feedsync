@@ -16,6 +16,7 @@ function upgrade_version_3_0_5() {
             $rex->process_image_modtime();
         break;
         case 'reaxml' :
+        case 'reaxml_fetch' :
             $rex = new REAXML_PROCESSOR();
             $rex->process_image_modtime();
         break;

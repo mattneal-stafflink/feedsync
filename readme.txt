@@ -1,19 +1,19 @@
-=== FeedSync REAXML Pre-Processor ===
-Author URI: http://www.realestateconnected.com.au/
+=== FeedSync XML Pre-Processor ===
+Author URI: https://www.realestateconnected.com.au/
 Plugin URI: https://easypropertylistings.com.au/extensions/feedsync/
 Contributors: mervb
-Tags: importer, reaxml, real estate, property, jupix, blm, eac, expert agent, rockend rest
+Tags: importer, reaxml, real estate, property, jupix, blm, eac, expert agent, rockend rest, xml2u
 Donate link: https://easypropertylistings.com.au/support-the-site/
 
-Stable tag: 3.4.4
+Stable tag: 3.5.1
 
 License: GNU Version 2 or Any Later Version
 
-Use FeedSync to merge and process real estate listing formats like REAXML, Jupix, BLM into a dynamic data url that you can import into your Real Estate website, property portal or custom application.
+Use FeedSync to merge and process real estate listing formats like REAXML, Jupix, BLM, xml2u into a dynamic data url that you can import into your Real Estate website, property portal or custom application.
 
 == Description ==
 
-FeedSync lets you quickly process merge and process real estate listing formats like REAXML, Jupix, BLM into a dynamic data url that you can import into your custom application or WordPress website project and display your clients real estate property listings quickly and easily.
+FeedSync lets you quickly process merge and process real estate listing formats like REAXML, Jupix, BLM, xml2u into a dynamic data url that you can import into your custom application or WordPress website project and display your clients real estate property listings quickly and easily.
 
 This is the only real estate data Pre-Processor that you can install yourself and it will automatically add Geocode coordinates (Latitude/Long ) to your property, elements during processing.
 
@@ -51,6 +51,47 @@ Add this to the config.php file to display errors:
 define('FEEDSYNC_DEBUG_DISPLAY', true );
 
 == Change log ==
+
+3.5.1, July 16, 2021
+
+* New: Support for FeedSync plugin system to add additional functionality to FeedSync through plugins.
+* Tweak: Update help page with info on per_page setting to limit the output of records. Default records is 1000 in the output URL.
+* Fix: Pagination notices with PHP 8.
+
+3.5, May 31, 2021
+
+* Extensive upgrades and enhancements throughout FeedSync to make XML processing a seamless process.
+* New: Manage listing status with a click with FEEDSYNC_EDIT set true in config.php.
+* New: Error reporting and display on installation to assist with issue diagnosis.
+* New: Summary row displaying listing counts.
+* New: Option to define folder permissions in config.php using FEEDSYNC_FOLDER_PERMISSIONS constant.
+* New: Database upgrading class added to streamline new installs and upgrade database process.
+* New: Listing Info page displaying attached images, image sizes and resolution along with map location.
+* New: Deleting listings are now moved to a deleted status instead of removing.
+* New: WordPress publishing settings to set a new feedsyncPostStatus field to allow incremental importing. Incremental import scripts required and use of status=all is required.
+* New: Commands to export by range using &days_range=100-365 output listings that have mod date in range between specified days.
+* New: Commands to export by days before using &days_before=100-365 output listings for that have mod date smaller than then specified days.
+* New: XML2U Format added. Supports multiple location fetching.
+* New: REAXML FTP Fetch option. Allows xml fetching from FTP location and processing. Files can be deleted once fetch has completed.
+* New: Support for New Zealand REAXML format address differences.
+* New: Processed files are now stored in YYYY/MM folders.
+* New: Multiple agent_id supported as comma separated.
+* Tweak: Jupix Format - Added option for let agreed & Sold STC listing status.
+* Tweak: REAXML Format - Use google geocode if no geo fields in extra fields.
+* Tweak: Expert Agent Format: Improvements to status handling and options to alter them.
+* Tweak: Jupix Format: Improvements to status handling and options to alter them.
+* Tweak: Improvements to date processing and detecting a wide range of date formats.
+* Tweak: Escape external links, escaping unwanted chars in URL.
+* Tweak: Log files are now .txt instead of .log file extension.
+* Tweak: Use of COOKIEPATH constant based on site url.
+* Tweak: Removed gettext dependency.
+* Tweak: Random access key is set during installation.
+* Tweak: Implemented additional checks before renaming files.
+* Tweak: Context prefix in server path check.
+* Tweak: Set a random access key during installation.
+* Fix: Permission denied notices while saving files.
+* Fix: Hidden file permissions issue.
+* Fix: Pagination divide by zero warning.
 
 3.4.4, April 14, 2020
 

@@ -12,7 +12,14 @@
 			$googleapiurl = $googleapiurl.'&key='.get_option('feedsync_google_api_key');
 		}
 
-		enqueue_js( array('jquery.min.js','jquery.prettyPhoto.js','tether.min.js','bootstrap.min.js','main.js') );
+		enqueue_js( array('jquery.min.js','jquery.prettyPhoto.js','tether.min.js','bootstrap.min.js') );
+		global $page_now;
+		if( 'listing-details' == $page_now ) {
+			enqueue_js( array($googleapiurl,'imagesloaded.min.js') );
+		}
+
+		// load main.js after all libraries.
+		enqueue_js( array('main.js') );
 
 	?>
 	<link rel="apple-touch-icon" sizes="57x57" href="<?php echo SITE_URL ?>/core/images/apple-icon-57x57.png">

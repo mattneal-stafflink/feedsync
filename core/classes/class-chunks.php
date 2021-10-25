@@ -88,6 +88,7 @@
 		            $path = 'propertyList';
 		        break;
 		        case 'reaxml' :
+		        case 'reaxml_fetch' :
 		            $path = 'propertyList';
 		        break;
 		        case 'expert_agent' :
@@ -97,6 +98,9 @@
 		           $path = 'Properties';
 		        break;
 		        case 'jupix' :
+		           $path = 'properties';
+		        break;
+		        case 'xml2u' :
 		           $path = 'properties';
 		        break;
 

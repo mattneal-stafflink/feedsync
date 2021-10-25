@@ -2,6 +2,7 @@
 require_once('classes/class-feedsync-error.php');
 require_once('classes/class-hook.php');
 require_once('classes/class-logger.php');
+require_once('classes/class-feedsync-datetime.php');
 include_once('constants.php');
 require_once('classes/class-validations.php');
 // include the pagination class
@@ -31,18 +32,10 @@ $sitewide_notices = array();
  *
  * @return [type] [description]
  * @since 3.4.0
+ * @since 3.5.0 use of COOKIEPATH constant based on site url
  */
 function get_rel_root_path() {
-
-    $root_path      = SITE_ROOT;
-    $root_path      = str_replace('\\', '/', $root_path);
-    $document_root  = $_SERVER['DOCUMENT_ROOT'];
-    $root_folder    = basename($document_root);
-
-    // explode doc root by root folder
-    $parts = explode($root_folder,$root_path);
-    $abs_path       = $parts[1];
-    return $abs_path;
+    return COOKIEPATH;
 }
 
 /**
@@ -50,15 +43,19 @@ function get_rel_root_path() {
  *
  * @since 1.0.0
  * @since 3.4.0 Tweak : Session path variable made independent of SITE_URL constant.
+ * @since 3.4.6 Tweak : Using session_id() to define session ID
  */
 function init_session() {
     $cookie_params  = session_get_cookie_params();
     $root_path      = get_rel_root_path();
     session_set_cookie_params($cookie_params['lifetime'], $root_path);
-    @session_start();
+    if( empty( session_id() ) ) {
+        @session_start();
+    }
+
 }
 add_action('init_session','init_session',21);
-do_action('init_session');
+
 
 /**
  * Autoload classes whereever required
@@ -181,8 +178,8 @@ function instantiate_options() {
 add_action('init_options','instantiate_options',1);
 
 // IMPORTANT: edit class-feedsync-upgrade.php and add version.
-$current_version    = '3.4.4';
-$build_number       = '20-0414';
+$current_version    = '3.5.1';
+$build_number       = '21-0716';
 
 $application_name = 'FeedSync REAXML Processor';
 
@@ -285,6 +282,85 @@ include_once('license-functions.php');
 
 do_action('after_functions_include');
 
+function cleanup_header_comment( $str ) {
+    return trim( preg_replace( '/\s*(?:\*\/|\?>).*/', '', $str ) );
+}
+
+function get_file_data( $file, $default_headers, $context = '' ) {
+    // We don't need to write to the file, so just open for reading.
+    $fp = fopen( $file, 'r' );
+
+    if ( $fp ) {
+        // Pull only the first 8 KB of the file in.
+        $file_data = fread( $fp, 8 * KB_IN_BYTES );
+
+        // PHP will close file handle, but we are good citizens.
+        fclose( $fp );
+    } else {
+        $file_data = '';
+    }
+
+    // Make sure we catch CR-only line endings.
+    $file_data = str_replace( "\r", "\n", $file_data );
+
+    /**
+     * Filters extra file headers by context.
+     *
+     * The dynamic portion of the hook name, `$context`, refers to
+     * the context where extra headers might be loaded.
+     *
+     * @param array $extra_context_headers Empty array by default.
+     */
+    $extra_headers = $context ? apply_filters( "extra_{$context}_headers", array() ) : array();
+    if ( $extra_headers ) {
+        $extra_headers = array_combine( $extra_headers, $extra_headers ); // Keys equal values.
+        $all_headers   = array_merge( $extra_headers, (array) $default_headers );
+    } else {
+        $all_headers = $default_headers;
+    }
+
+    foreach ( $all_headers as $field => $regex ) {
+        if ( preg_match( '/^[ \t\/*#@]*' . preg_quote( $regex, '/' ) . ':(.*)$/mi', $file_data, $match ) && $match[1] ) {
+            $all_headers[ $field ] = cleanup_header_comment( $match[1] );
+        } else {
+            $all_headers[ $field ] = '';
+        }
+    }
+
+    return $all_headers;
+}
+
+function get_plugin_data( $plugin_file, $markup = true, $translate = true ) {
+
+    $default_headers = array(
+        'Name'        => 'Plugin Name',
+        'PluginURI'   => 'Plugin URI',
+        'Version'     => 'Version',
+        'Description' => 'Description',
+        'Author'      => 'Author',
+        'AuthorURI'   => 'Author URI',
+        'RequiresPHP' => 'Requires PHP',
+    );
+
+    $plugin_data = get_file_data( $plugin_file, $default_headers, 'plugin' );
+
+    return $plugin_data;
+}
+
+/** Load Plugins */
+function load_plugins() {
+
+    $plugins = get_files_list( get_path('plugins'),"php");
+
+    foreach( $plugins as $plugin ) {
+        $plugin_data = get_plugin_data( $plugin );
+        if( !empty( $plugin_data['Name'] ) ) {
+            require_once( $plugin );
+        }
+    }
+}
+load_plugins();
+
 /**
  * Force file permissions :
  *
@@ -386,7 +462,6 @@ function feedsync_login_jumbotron() { ?>
                         </form>
                     </div>
                 </div>
-                <?php sitewide_notices(); ?>
             </div>
         </div>
     </div>
@@ -408,11 +483,17 @@ function get_files_list($folder,$pattern) {
 
 }
 
+class RecursiveDotFilterIterator extends  RecursiveFilterIterator {
+    public function accept() {
+        return '.' !== substr($this->current()->getFilename(), 0, 1);
+    }
+}
+
 function get_recursive_files_list($folder,$pattern) {
 
     $pattern    = "/^.*\.(".$pattern.")$/";
     $dir        = new RecursiveDirectoryIterator($folder);
-    $ite        = new RecursiveIteratorIterator($dir);
+    $ite        = new RecursiveIteratorIterator( new RecursiveDotFilterIterator( $dir ) );
     $files      = new RegexIterator($ite, $pattern);
     $fileList = array();
     foreach($files as $file) {
@@ -430,6 +511,7 @@ function get_sub_path() {
 
         case 'blm' :
         case 'reaxml' :
+        case 'reaxml_fetch' :
         case 'expert_agent' :
         case 'rockend' :
         case 'jupix' :
@@ -475,6 +557,10 @@ function get_path($folder) {
 
         case 'logs' :
             $path =  LOGS_FOLDER_PATH;
+        break;
+
+        case 'plugins' :
+            $path =  PLUGINS_PATH;
         break;
     }
 
@@ -537,23 +623,7 @@ function get_processed_xml() {
 function feedsync_format_date( $date ) {
     // supress any timezone related notice/warning;
     error_reporting(0);
-    $date_example = '2014-07-22-16:45:56';
-
-    $pos = strpos($date, 'T');
-
-    if ($pos !== false) {
-        $date = new dateTime($date);
-        return $date->format('Y-m-d H:i:s');
-    } else {
-        $tempdate = explode('-',$date);
-        $date = $tempdate[0].'-'.$tempdate[1].'-'.$tempdate[2];
-
-        if( isset($tempdate[3]) ) {
-            $date .= ' '.$tempdate[3];
-        }
-
-        return  date("Y-m-d H:i:s",strtotime($date));
-    }
+    return Feedsync_DateTime::fs_convert_format( $date );
 }
 
 function feedsync_format_sold_date( $date ) {
@@ -656,16 +726,26 @@ function import_listings($cron_mode = false,$args = array() ) {
 
         case 'blm' :
             $rex = new BLM_PROCESSOR($cron_mode);
+            if( 'yes' !== get_option('reaxml_publish_processed') ) {
+                $rex->process_publish();
+            }
             $rex->import();
         break;
 
         case 'reaxml' :
+        case 'reaxml_fetch' :
             $rex = new REAXML_PROCESSOR($cron_mode);
+            if( 'yes' !== get_option('reaxml_publish_processed') ) {
+                $rex->process_publish();
+            }
             $rex->import();
         break;
 
         case 'expert_agent' :
             $rex = new Expert_Agent_PROCESSOR($cron_mode);
+            if( 'yes' !== get_option('reaxml_publish_processed') ) {
+                $rex->process_publish();
+            }
             $rex->import();
         break;
 
@@ -677,11 +757,22 @@ function import_listings($cron_mode = false,$args = array() ) {
 
         case 'rockend' :
             $rex = new ROCKEND_PROCESSOR($cron_mode);
+            if( 'yes' !== get_option('reaxml_publish_processed') ) {
+                $rex->process_publish();
+            }
             $rex->import();
         break;
 
         case 'jupix' :
             $rex = new JUPIX_PROCESSOR($cron_mode);
+            if( 'yes' !== get_option('reaxml_publish_processed') ) {
+                $rex->process_publish();
+            }
+            $rex->import();
+        break;
+
+         case 'xml2u' :
+            $rex = new XML2U_PROCESSOR($cron_mode);
             $rex->import();
         break;
 
@@ -722,6 +813,7 @@ function process_missing_coordinates() {
             $rex->process_missing_geocode();
         break;
         case 'reaxml' :
+        case 'reaxml_fetch' :
             $rex = new REAXML_PROCESSOR();
             $rex->process_missing_geocode();
         break;
@@ -763,6 +855,7 @@ function regenerate_coordinates() {
             $rex->regenerate_coordinates();
         break;
         case 'reaxml' :
+        case 'reaxml_fetch' :
             $rex = new REAXML_PROCESSOR();
             $rex->regenerate_coordinates();
         break;
@@ -788,12 +881,55 @@ function regenerate_coordinates() {
 
 add_action('ajax_regenerate_coordinates','regenerate_coordinates');
 
+/**
+ * Regenerate status for listings.
+ * @return json mixed
+ * @since 3.5.0
+ */
+function switch_status() {
+
+    $feedtype = get_option('feedtype');
+
+    switch($feedtype) {
+
+        case 'blm' :
+            $rex = new BLM_PROCESSOR();
+            $rex->switch_status();
+        break;
+        case 'reaxml' :
+        case 'reaxml_fetch' :
+            $rex = new REAXML_PROCESSOR();
+            $rex->switch_status();
+        break;
+        case 'expert_agent' :
+            $rex = new Expert_Agent_PROCESSOR();
+            $rex->switch_status();
+        break;
+        case 'eac' :
+             $rex = new EAC_API(false);
+            $rex->switch_status();
+        break;
+        case 'rockend' :
+            $rex = new ROCKEND_PROCESSOR();
+            $rex->switch_status();
+        break;
+        case 'jupix' :
+            $rex = new JUPIX_PROCESSOR();
+            $rex->switch_status();
+        break;
+
+    }
+}
+
+add_action('ajax_switch_status','switch_status');
+
 function process_missing_listing_agents() {
 
     $feedtype = get_option('feedtype');
     switch($feedtype) {
 
         case 'reaxml' :
+         case 'reaxml_fetch' :
             $rex = new REAXML_PROCESSOR();
             $rex->process_missing_listing_agents();
         break;
@@ -1142,9 +1278,11 @@ function is_feedsync_license_valid() {
  * @param      array   $options  The options.
  *
  * @since 3.4.0
+ * @since 3.4.5 verify set to false to avoid cacert.pem related errors.
+ * @since 3.4.7 show exception in sitewide notice
  * @return     mixed  The Response.
  */
-function feedsync_remote_get( $url, $headers = array(), $options = array() ) {
+function feedsync_remote_get( $url, $headers = array(), $options = array('verify'   =>  false) ) {
 
     require_once '3rd-party/Requests/Requests.php';
     Requests::register_autoloader();
@@ -1152,7 +1290,7 @@ function feedsync_remote_get( $url, $headers = array(), $options = array() ) {
     try{
         return Requests::get( $url, $headers, $options);
     } catch (Exception $exc) {
-        // don't throw fatal exception in case of timeouts
+        add_sitewide_notices( $exc->getMessage(), 'danger' );
         return false;
     }
 
@@ -1222,3 +1360,228 @@ function _deprecated_function( $function, $version, $replacement = null ) {
         }
     }
 }
+
+/**
+ * Returns listing images along with listing data.
+ * @return json mixed
+ * @since 3.4.0
+ */
+function get_listing_data( $id = 0 ) {
+
+    if( 0 == $id ) {
+        $id         = intval( $_GET['id'] );
+    }
+
+    if($id <= 0)
+        return;
+
+    $alllistings = fsdb()->get_results("select * from ".fsdb()->listing." where id = {$id} ");
+
+    $feedtype = get_option('feedtype');
+
+    $images = array();
+    if ( !empty( $alllistings ) ) {
+        foreach ( $alllistings as $listing ) {
+            $xmlFile = new DOMDocument('1.0', 'UTF-8');
+            $xmlFile->preserveWhiteSpace = false;
+            $xmlFile->loadXML($listing->xml);
+            $xmlFile->formatOutput = true;
+            $xpath = new DOMXPath($xmlFile);
+            $item = $xmlFile->documentElement;
+
+            switch($feedtype) {
+
+                case 'expert_agent' :
+                    // images are wrapped in picture > filename node value.
+                    $imgs = $xpath->query('//picture[@lastchanged]/filename');
+                    if ( !empty($imgs) ) {
+                        foreach ($imgs as $k=>$img) {
+                            $image_url = $img->nodeValue;
+                            if( !empty( $image_url ) ) {
+                                $images[] = $image_url;
+                            }
+
+                        }
+                    }
+                break;
+
+                case 'blm' :
+                    // target image tags, skip image text tags.
+                    $imgs = $xpath->query("//*[starts-with(name(), 'MEDIA_IMAGE_') and not(starts-with(name(), 'MEDIA_IMAGE_TEXT_')) ]");
+                    if (!empty($imgs)) {
+                        foreach ($imgs as $k=>$img) {
+                            $image_url = trim($img->getAttribute('url'));
+                            if( !empty( $image_url ) ) {
+                                $images[] = $image_url;
+                            }
+
+                        }
+                    }
+                break;
+
+                case 'reaxml' :
+                case 'reaxml_fetch' :
+                case 'rockend' :
+                case 'xml2u' :
+                    $imgs = $xpath->query('//img[@url]');
+                    if (!empty($imgs)) {
+                        foreach ($imgs as $k=>$img) {
+                            $image_url = trim($img->getAttribute('url'));
+                            if( !empty( $image_url ) ) {
+                                $images[] = $image_url;
+                            }
+
+                        }
+                    }
+                break;
+                case 'jupix' :
+                    $imgs = $xpath->query('//images/image');
+                    if (!empty($imgs)) {
+                        foreach ($imgs as $k=>$img) {
+                            $image_url = trim($img->nodeValue);
+                            if( !empty( $image_url ) ) {
+                                $images[] = $image_url;
+                            }
+
+                        }
+                    }
+                break;
+
+            }
+
+
+        }
+    }
+    return [ 'images'    =>  $images, 'data' =>  $listing ];
+}
+
+function is_editing_allowed() {
+
+    if( ( defined('FEEDSYNC_EDIT') && FEEDSYNC_EDIT ) || ( defined('FEEDSYNC_RESET') && FEEDSYNC_RESET ) ){
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * Returns the size of a file without downloading it, or -1 if the file
+ * size could not be determined.
+ *
+ * @param $url - The location of the remote file to download. Cannot
+ * be null or empty.
+ *
+ * @return The size of the file referenced by $url, or -1 if the size
+ * could not be determined.
+ */
+function get_remote_file_size($url, $formatSize = true, $useHead = true) {
+
+    if( empty( $url ) ) {
+        return;
+    }
+
+    if (false !== $useHead) {
+        stream_context_set_default(array('http' => array('method' => 'HEAD')));
+    }
+    $head = array_change_key_case(get_headers($url, 1));
+    // content-length of download (in bytes), read from Content-Length: field
+    $clen = isset($head['content-length']) ? $head['content-length'] : 0;
+
+    // cannot retrieve file size, return "-1"
+    if (!$clen) {
+        return -1;
+    }
+
+    if (!$formatSize) {
+        return $clen; // return size in bytes
+    }
+
+    $size = $clen;
+
+    // fix for issue when content length is in array format.
+    $clen = is_array( $clen ) ? end( $clen ) : $clen;
+    switch ($clen) {
+        case $clen < 1024:
+            $size = $clen .' B'; break;
+        case $clen < 1048576:
+            $size = round($clen / 1024, 2) .' KiB'; break;
+        case $clen < 1073741824:
+            $size = round($clen / 1048576, 2) . ' MiB'; break;
+        case $clen < 1099511627776:
+            $size = round($clen / 1073741824, 2) . ' GiB'; break;
+    }
+
+    return $size; // return formatted size
+}
+
+function get_listing_count( $type = '', $status = '' ) {
+
+    $query = "SELECT count(*) as `rows` FROM ".fsdb()->listing." WHERE 1 = 1 ";
+
+    $types      = array('rental','property','residential','commercial','land','rural','business','commercialLand','holidayRental');
+    $statuses   = array('leased','sold','withdrawn','current','offmarket','deleted');
+
+    if( in_array($type,$types) ) {
+        $query .= " AND type = '{$type}' ";
+    }
+
+    if( in_array($status,$statuses) ) {
+        $query .= " AND status = '{$status}' ";
+    }  elseif($status == 'all' ) {
+        // do nothing
+    } else {
+        $query .= " AND status NOT IN ('withdrawn','offmarket','deleted') ";
+    }
+
+    return (int) fsdb()->get_var( $query );
+}
+
+/**
+ * Missing map key warning message
+ *
+ * @since 3.5.0
+ */
+function feedsync_map_api_key_warning() { ?>
+
+	<div class="alert-danger feedsync-warning-map-key" >
+		<p>Ensure you have set a Google Maps API Key in Settings to display the map.<em></p>
+	</div>
+	<?php
+}
+
+/**
+ * Test FTP connection.
+ * @return json mixed
+ * @since 3.5
+ */
+function test_reaxml_fetch_connection() {
+
+    $host       = get_option('feedsync_reaxml_remote_host');
+    $user       = get_option('feedsync_reaxml_remote_user');
+    $pass       = get_option('feedsync_reaxml_remote_pass');
+    $passive    = get_option('feedsync_reaxml_remote_passive');
+    $ssl        = get_option('feedsync_reaxml_remote_is_ssl');
+    $port       = get_option('feedsync_reaxml_remote_port');
+
+    if( empty( $port ) ) {
+        $port = 21;
+    }
+
+    if( empty( $host ) || empty( $user ) || empty( $pass ) ) {
+        return;
+    }
+
+    if( 'yes' === $ssl ) {
+        $connection_id = ftp_ssl_connect( $host, $port );
+    } else {
+        $connection_id = ftp_connect( $host, $port );
+    }
+
+    $login_result = @ftp_login( $connection_id, $user, $pass );
+    if( true === $login_result ) {
+        die( json_encode( array( 'status'   =>  'success', 'message'    =>  get_success_html( '<strong>Connection successful</strong>' ) ) ) );
+    } else {
+        die( json_encode( array( 'status'   =>  'fail', 'message'   =>  get_error_html( '<strong>Unable to connect, please check ftp details</strong>' ) ) ) );
+    }
+}
+add_action('ajax_test_reaxml_fetch_connection','test_reaxml_fetch_connection');

@@ -25,7 +25,7 @@ function feedsync_form_exporter() {
         $query .= " AND status = '{$status}' ";
     } elseif($status == 'all' ) {
         // Exclude Deleted and invalid
-        $query .= " AND status NOT IN ('invalid','deleted') ";
+        $query .= " AND status NOT IN ('invalid') ";
     }else {
         $query .= " AND status NOT IN ('withdrawn','offmarket','invalid','deleted') ";
     }
@@ -55,7 +55,7 @@ $feedsync_hook->add_action('feedsync_form_do_output','feedsync_form_do_output');
 
 /**
  * Feedsync convert MS quotes to UTF-8 Quotes.
- * 
+ *
  * @param  [type] $str [description]
  * @return [type]      [description]
  * @since 3.4.2
@@ -98,6 +98,9 @@ function feedsync_convert_ms_quotes( $str ) {
  *
  * @since 3.4.0 transliterate MS Word quotes to UTF quotes
  * @since 3.4.2 replace iconv function to handle MS quotes.
+ * @since 3.4.6 per_page & page attributes to filter do_output results.
+ * @since 3.5 multiple agent_id supported as comma seperated
+
  */
 function feedsync_form_do_output() {
 
@@ -144,9 +147,14 @@ function feedsync_form_do_output() {
         $query .= " AND ".fsdb()->listing.".type = '{$type}' ";
         }
 
-        $agent_id   = isset($_GET['agent_id']) ? fsdb()->escape(trim($_GET['agent_id'])): '';
-        if( $agent_id != '' ) {
-        $query .= " AND ".fsdb()->listing.".agent_id = '{$agent_id}' ";
+        $agent_id   = isset($_GET['agent_id']) ? trim( $_GET['agent_id'] ) : '';
+
+        if( !empty( $agent_id ) ) {
+            $agent_id = array_map( 'trim', explode( ',', $agent_id ) );
+        
+            if ( count( $agent_id ) ) {
+                $query .= " AND ".fsdb()->listing.".agent_id IN ('" . implode( "','", $agent_id ) . "') ";
+            }
         }
 
         $listing_agent   = isset($_GET['listing_agent']) ? fsdb()->escape(trim($_GET['listing_agent'])): '';
@@ -170,22 +178,45 @@ function feedsync_form_do_output() {
         $query .= " AND DATE(`mod_date`) BETWEEN '{$days_back}' AND  '{$date_today}'";
         }
 
+        // days before
+        $days_before   = isset($_GET['days_before']) ? fsdb()->escape(trim($_GET['days_before'])) : '';
+        if( intval($days_before) > 0 ) {
+            $days_before  = date ( 'Y-m-d', strtotime('- '.$days_before.' days') );
+            $query .= " AND DATE(`mod_date`) < '{$days_before}' ";
+        }
+
+        // days range
+        $days_range   = isset($_GET['days_range']) ? fsdb()->escape(trim($_GET['days_range'])) : '';
+        $days_range   = explode('-', $days_range );
+
+        if( intval($days_range[0]) > 0 && intval($days_range[1]) > 0 ) {
+        $range_end  = date ( 'Y-m-d', strtotime('- '.intval($days_range[0]).' days') );
+        $range_start  = date ( 'Y-m-d', strtotime('- '.intval($days_range[1]).' days') );
+        $query .= " AND DATE(`mod_date`) BETWEEN '{$range_start}' AND  '{$range_end}'";
+        }
+
         $minutes_back   = isset($_GET['minutes_back']) ? fsdb()->escape(trim($_GET['minutes_back'])) : '';
-    if( intval($minutes_back) > 0 ) {
-        $now = date('Y-m-d H:i:s');
-            $minutes_back  = date('Y-m-d H:i:s', strtotime('- '.$minutes_back.' minutes') );
-        $query .= " AND `mod_date` BETWEEN '{$minutes_back}' AND  '{$now}'";
-    }
+        if( intval($minutes_back) > 0 ) {
+            $now = date('Y-m-d H:i:s');
+                $minutes_back  = date('Y-m-d H:i:s', strtotime('- '.$minutes_back.' minutes') );
+            $query .= " AND `mod_date` BETWEEN '{$minutes_back}' AND  '{$now}'";
+        }
 
         if( in_array($status,$statuses) ) {
-        $query .= " AND status = '{$status}' ";
+            $query .= " AND status = '{$status}' ";
         }  elseif($status == 'all' ) {
-        // exclude deleted and invalid
-        $query .= " AND ".fsdb()->listing.".status NOT IN ('invalid','deleted') ";
+            // exclude deleted and invalid
+            $query .= " AND ".fsdb()->listing.".status NOT IN ('invalid') ";
         } else {
-        $query .= " AND ".fsdb()->listing.".status NOT IN ('withdrawn','offmarket','invalid','deleted') ";
+            $query .= " AND ".fsdb()->listing.".status NOT IN ('withdrawn','offmarket','invalid','deleted') ";
         }
+
+        $records_per_page = (int) isset($_GET['per_page'])? $_GET['per_page'] : get_option('feedsync_pagination',false);
+        $page = (int) isset( $_GET['page'] ) ? $_GET['page'] : 1;
+        $limit_query = ' LIMIT ' . ( ($page - 1) * $records_per_page) . ', ' . $records_per_page . '';
+        $query .= $limit_query;
     }
+    
     $results = fsdb()->get_results($query);
     header("Content-type: text/xml");
     ob_start();
@@ -288,6 +319,7 @@ function feedsync_get_import_logs() {
  * @param  array $results
  *
  * @since 3.4.0 Fixed the incorrect log file extension, downloaded from log page
+ * @since build number : 20-1020, changed extension of log file to txt, works with older log file with .log extension as well.
  */
 function feedsync_render_log_table($results,$page) {
     global $pagination;
@@ -351,7 +383,7 @@ function feedsync_render_log_table($results,$page) {
                     <td class="log-status" >'.$result->status.'</td>
                     <td class="log-summary">'.nl2br($result->summary).'</td>
                     <td class="log-download">
-                        <a download="'.basename($result->file_name, '.xml').'.log" href="'.get_url('logs').$result->log_file.'"><span>Download</span>
+                        <a download="'.basename($result->file_name, '.xml').'.txt" href="'.get_url('logs').$result->log_file.'"><span>Download</span>
                         </a>
                     </td>
                 </tr>';
@@ -395,6 +427,29 @@ function imported_files_sorting_class($key) {
     return $class;
 }
 
+function render_counter_block( $type='', $label='', $statues = [] ) {
+    $total = get_listing_count( $type );
+    if( $total <= 0) {
+        return;
+    } ?>
+    <div class="listing-counter <?php echo $type; ?>-counter">
+        <label>
+            <?php echo $label; ?>
+        </label>
+        <?php
+            foreach ($statues as $status_slug => $status_label ) {
+                $count = get_listing_count( $type, $status_slug );
+                if( $count <= 0) {
+                    continue;
+                } ?>
+               <div class="residential-counter-<?php echo $status_slug; ?>">
+                    <?php echo $count.' '.$status_label; ?>
+                </div> <?php
+            }
+        ?>
+    </div> <?php
+}
+
 function display_export_data($result_data , $page = 'all') {
 
     $results    = $result_data['results'];
@@ -402,19 +457,41 @@ function display_export_data($result_data , $page = 'all') {
 
 
     ob_start();
-    get_header('listings');
+    get_header('listings'); ?>
+
+    <?php if( 'all' === $page ): ?>
+    <div class="row">
+        <div class="col-md-12">
+            <div class="listing-counter-widget">
+                <?php
+                    render_counter_block( 'residential', 'Residential', [ 'current' =>  'Current', 'sold'   =>  'Sold' ] );
+                    render_counter_block( 'rental', 'Rental', [ 'current' =>  'Current', 'leased'   =>  'Leased' ] );
+                    render_counter_block( 'land', 'Land', [ 'current' =>  'Current', 'sold'   =>  'Sold' ] );
+                    render_counter_block( 'commercial', 'Commercial', [ 'current' =>  'Current', 'leased'   =>  'Leased', 'sold'   =>  'Sold' ] );
+                    render_counter_block( 'rural', 'Rural', [ 'current' =>  'Current', 'sold'   =>  'Sold' ] );
+                    render_counter_block( 'business', 'Business', [ 'current' =>  'Current', 'leased'   =>  'Leased', 'sold'   =>  'Sold' ] );
+                    render_counter_block( 'commercialLand', 'Commercial Land', [ 'current' =>  'Current', 'leased'   =>  'Leased', 'sold'   =>  'Sold' ] );
+                ?>
+            </div>
+        </div>
+    </div> <?php
+    endif;
+
     get_listings_sub_header( $page );
 
+    $deleted_text = 'deleted' === $page ? 'Delete selected records?' : 'Mark as deleted?';
+    $deleted_action = 'deleted' === $page ? 'delete_records_from_db' : 'delete_records';
     //$table = '<div class="row"> <div class="col-lg-12"> '.$pagination->render(true).' </div> </div>';
     ?>
+
     <form method="post">
 
         <div class="row" style="margin-bottom: 1em;">
             <div class="col-md-12">
-                 <?php if( is_reset_enabled() ) : ?>
+                 <?php if( is_editing_allowed() ) : ?>
                 <div class="col-md-5 pull-left no-padding">
-                    <input type="hidden" name="action" value="delete_enteries"/>
-                    <button id="delete-enteries-btn" disabled class='btn btn-sm' type="submit" >Delete selected records?</button>
+                    <input type="hidden" name="action" value="<?php echo $deleted_action; ?>"/>
+                    <button id="delete-records-btn" disabled class='btn btn-sm' type="submit" ><?php echo $deleted_text; ?></button>
                 </div>
                 <?php endif; ?>
                 <div class="col-md-6 text-right pull-right">
@@ -456,7 +533,7 @@ function display_export_data($result_data , $page = 'all') {
                      <table data-toggle='table' class='table table-hover'>
                         <thead>
                             <tr>";
-                                if( is_reset_enabled() ){
+                                if( is_editing_allowed() ){
                                     $table .= "<th class='cb'>
                                     <input  type=\"checkbox\" id=\"select_all_items\" />
                                     </th>";
@@ -495,7 +572,9 @@ function display_export_data($result_data , $page = 'all') {
                                 <th nowrap class='geocode'>
                                     <a href='?orderby=geocode'><span>Map</span><i class=' ".export_sorting_class('geocode')." {$orderclass}' ></i></a>
                                 </th>
-
+                                <th nowrap class='details'>
+                                    <a href='javascript:return false;'><span>Info</span></a>
+                                </th>
                             </tr>
                         </thead>";
 
@@ -530,11 +609,13 @@ function display_export_data($result_data , $page = 'all') {
 
                 $rated_class = strpos($result->xml, '<feedsyncFeaturedListing>') !== false ? 'rated' : '';
                 $fav_title = strpos($result->xml, '<feedsyncFeaturedListing>') !== false ? 'Favourite Listing' : 'Mark Favourite';
+                $editing_class = '';
                 $table .='
                     <tr data-id="'.$result->id.'">';
-                    if( is_reset_enabled() ){
+                    if( is_editing_allowed() ){
                         $table .='
                         <td class="cb"><input type="checkbox" name="delete_items[]" value="'.$result->id.'" /></td>';
+                        $editing_class = ' fs-editing-allowed ';
                     }
                         $table .='
                         <td data-id="'.$result->id.'" class="id">'.$result->id.'
@@ -543,8 +624,27 @@ function display_export_data($result_data , $page = 'all') {
                             </a>
                         </td>
                         <td class="address">'.$result->address.'</td>
-                        <td class="type '.$result->type.'">'.$result->type.'</td>
-                        <td class="status '.$result->status.'">'.$result->status.'</td>
+                        <td class="type-'.$result->type.'">'.$result->type.'</td>
+                        <td class="status fs-status-cell '.$editing_class.''.$result->status.'">';
+                            if ( is_editing_allowed() ) {
+                                $table .='<select style="display:none;" class="fs-status-dropdown">
+                                <option '. (('current' == $result->status) ? ' selected ' : '') .' value="current">Current</option>';
+
+                                if( 'rental' !== $result->type ) :
+                                    $table .='<option '. (('sold' == $result->status) ? ' selected ' : '') .'value="sold">Sold</option>';
+                                endif;
+                                if( in_array( $result->type, ['rental', 'commercial', 'commercialLand'] ) ) :
+                                    $table .='<option '. (('leased' == $result->status) ? ' selected ' : '') .'value="leased">Leased</option>';
+                                endif;
+                                $table .='<option '. (('withdrawn' == $result->status) ? ' selected ' : '') .'value="withdrawn">Withdrawn</option>
+                                <option '. (('offmarket' == $result->status) ? ' selected ' : '') .'value="offmarket">OffMarket</option>
+                                <option '. (('deleted' == $result->status) ? ' selected ' : '') .'value="deleted">Deleted</option>
+                                </select>
+                                <a href="#" style="display:none;" class="fs-change-status">Change</a>';
+                            }
+
+                        $table .= '<span class="fs-status-text">'.$result->status.'</span>
+                        </td>
                         <td class="first-date">'.$result->firstdate.'</td>
                         <td class="mod-date">'.$result->mod_date.'</td>
                         <td class="unique-id">'.$result->unique_id.'</td>
@@ -552,6 +652,11 @@ function display_export_data($result_data , $page = 'all') {
                         <td class="geocode">
                             <a href="#"  '.$atts.'>
                                 <img src="'.$map_img.'"/>
+                            </a>
+                        </td>
+                        <td class="details">
+                            <a target="_self" class="view-listing-images" href="'.CORE_URL.'sub-pages/listings-details.php?id='.$result->id.'">
+                                <img src="'.get_option('site_url').'core/assets/images/feedsync-images-icon-v3.svg" />
                             </a>
                         </td>
                     </tr>';
@@ -614,11 +719,11 @@ function display_agents($results) {
         ?>
         <form method="post"> <?php
 
-        if( is_reset_enabled() ) : ?>
+        if( is_editing_allowed() ) : ?>
             <div class="row" style="margin-bottom: 1em;">
                 <div class="col-md-12">
-                    <input type="hidden" name="action" value="delete_agent_enteries"/>
-                    <button id="delete-enteries-btn" disabled class='btn btn-sm' type="submit" >Delete selected records?</button>
+                    <input type="hidden" name="action" value="delete_agent_records"/>
+                    <button id="delete-records-btn" disabled class='btn btn-sm' type="submit" >Delete selected records?</button>
                 </div>
             </div>
 
@@ -632,14 +737,14 @@ function display_agents($results) {
                      <table data-toggle='table' class='table table-hover'>
                         <thead>
                             <tr>";
-                                if( is_reset_enabled() ){
+                                if( is_editing_allowed() ){
                                     $table .= "<th class='cb'>
                                     <input  type=\"checkbox\" id=\"select_all_items\" />
                                     </th>";
                                 }
                                $table .= "
                                 <th class='id'>#</th>
-                                <th class='agent_id'>Agent ID</th>
+                                <th class='agent_id'>Office ID</th>
                                 <th class='name'>Name</th>
                                 <th class='email'>Email</th>
                                 <th class='telephone'>Telephone</th>
@@ -650,7 +755,7 @@ function display_agents($results) {
         foreach($results as $result) {
 
             $table .= '<tr>';
-            if( is_reset_enabled() ){
+            if( is_editing_allowed() ){
                 $table .='
                 <td class="cb"><input type="checkbox" name="delete_items[]" value="'.$result->id.'" /></td>';
             }
@@ -712,7 +817,7 @@ function export_data($results) {
 <'.get_parent_element().'>'."\n";
 
         foreach($results as $listing) {
-    		echo feedsync_convert_ms_quotes( $listing->xml );
+            echo feedsync_convert_ms_quotes( $listing->xml );
         }
         echo '</'.get_parent_element().'>';
         $xml =  ob_get_clean();
@@ -735,6 +840,7 @@ function get_parent_element() {
             $path = 'propertyList';
         break;
         case 'reaxml' :
+        case 'reaxml_fetch' :
             $path = 'propertyList';
         break;
         case 'expert_agent' :
@@ -752,11 +858,50 @@ function get_parent_element() {
 
 }
 
-function delete_enteries() {
+function delete_records() {
+
+    if( !empty($_POST['delete_items']) && is_editing_allowed() ){
+
+        $ids = array_map('intval', $_POST['delete_items'] );
+        $ids = join("','",$ids);
+        $alllistings = fsdb()->get_results("SELECT * FROM ".fsdb()->listing." WHERE id IN ('$ids') ");
+
+        if ( !empty( $alllistings ) ) {
+            foreach ( $alllistings as $listing ) {
+                $xmlFile = new DOMDocument('1.0', 'UTF-8');
+                $xmlFile->preserveWhiteSpace = false;
+                $xmlFile->loadXML($listing->xml);
+                $xmlFile->formatOutput = true;
+                $xpath = new DOMXPath($xmlFile);
+                $item = $xmlFile->documentElement;
+
+                $xmlFile->documentElement->setAttribute('status', 'deleted' );
+                $newxml         = $xmlFile->saveXML($xmlFile->documentElement);
+
+                $db_data   = array(
+                    'xml'       =>  $newxml,
+                    'status'    =>  'deleted'
+                );
+
+                $db_data    =   array_map(array( fsdb() ,'escape'), $db_data);
+
+                $query = "UPDATE ".fsdb()->listing." SET
+                                xml             = '{$db_data['xml']}',
+                                status          = '{$db_data['status']}'
+                                WHERE id        = '{$listing->id}'
+                            ";
+                fsdb()->query($query);
+            }
+        }
+    }
+}
 
 
+$feedsync_hook->add_action('feedsync_form_delete_records','delete_records');
 
-    if( !empty($_POST['delete_items']) && is_reset_enabled() ){
+function delete_records_from_db() {
+
+    if( !empty($_POST['delete_items']) && is_editing_allowed() ){
 
         $ids = array_map('intval', $_POST['delete_items'] );
         $ids = join("','",$ids);
@@ -765,13 +910,13 @@ function delete_enteries() {
 }
 
 
-$feedsync_hook->add_action('feedsync_form_delete_enteries','delete_enteries');
+$feedsync_hook->add_action('feedsync_form_delete_records_from_db','delete_records_from_db');
 
-function delete_agent_enteries() {
+function delete_agent_records() {
 
 
 
-    if( !empty($_POST['delete_items']) && is_reset_enabled() ){
+    if( !empty($_POST['delete_items']) && is_editing_allowed() ){
 
         $ids = array_map('intval', $_POST['delete_items'] );
         $ids = join("','",$ids);
@@ -780,4 +925,4 @@ function delete_agent_enteries() {
 }
 
 
-$feedsync_hook->add_action('feedsync_form_delete_agent_enteries','delete_agent_enteries');
+$feedsync_hook->add_action('feedsync_form_delete_agent_records','delete_agent_records');

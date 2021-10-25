@@ -12,13 +12,7 @@
 	$page_now = 'images';
 	get_header('Imported');
 	get_listings_sub_header( $page_now );
-?>
 
-		<div class="panel panel-default">
-		  <!-- Default panel contents -->
-		  <div class="panel-heading">Images</div>
-
-			<?php
 			# The current directory
 			$directory = dir(IMAGES_PATH);
 			
@@ -34,7 +28,7 @@
 			$do_link = TRUE; 
 			$sort_what = 0; //0- by name; 1 - by size; 2 - by date
 			$sort_how = 0; //0 - ASCENDING; 1 - DESCENDING
-
+			$new_array = [];
 
 			# # #
 			function dir_list($dir){ 
@@ -154,25 +148,58 @@
 		        (($pagination->get_page() - 1) * $records_per_page),    //  starting with these records
 		        $records_per_page                                       //  this many records
 		    );
+
+		    if( isset( $_GET['id'] ) && $_GET['id'] >= 0 ) {
+				$results = get_listing_data();
+			}
 		    
 			?>
-			<div class="table"> 
-			
-					<?php				
-					foreach($results as $result) { 
-						if (!$do_link) { 
-							
-						}else{ 
-							$line = '<span><a rel="prettyPhoto" href="'.IMAGES_URL .  $result[0] . '">' 
-										. '<img  class="feedsync-image" src="' . IMAGES_URL . $result[0] .  '" width="149" height="150" />' .
-									"</a></span>"; 
-							
-						} 
-						echo $line; 
-					} 
+			<div class="panel panel-default">
+				<!-- Default panel contents -->
+				<div class="panel-heading">Images
+					<?php
+						if( isset( $_GET['id'] ) && $_GET['id'] >= 0 ) {
+							echo ' : <span class="fs-image-address">'. $results['data']->address.'</span>';
+						}
 					?>
-			</div>
+				</div>
+					<div class="table fs-images-table"> 
+					
+							<?php
+								
+								if( isset( $_GET['id'] ) && $_GET['id'] >= 0 ) {
+
+									foreach($results['images'] as $result) { 
+										if (!$do_link) { 
+											
+										}else{ 
+											$line = '<span><a rel="prettyPhoto" href="'.$result . '">' 
+														. '<img  class="feedsync-image" src="' . $result .  '" width="149" height="150" />' .
+													"</a><span class='fs-image-size'>".get_remote_file_size($result)."</span></span>"; 
+											
+										} 
+										echo $line; 
+									}
+
+								} else {
+									foreach($results as $result) { 
+										if (!$do_link) { 
+											
+										}else{ 
+											$line = '<span><a rel="prettyPhoto" href="'.IMAGES_URL .  $result[0] . '">' 
+														. '<img  class="feedsync-image" src="' . IMAGES_URL . $result[0] .  '" width="149" height="150" />' .
+													"</a></span>"; 
+											
+										} 
+										echo $line; 
+									}
+								}
+								 
+							?>
+					</div>
+			<?php if( empty( $_GET['id'] ) ) : ?>
 			<div class="row"> <div class="col-lg-12"> <?php echo $pagination->render(true); ?> </div> </div>
-		</div>
+			<?php endif; ?>
+			</div>
 		
 <?php echo get_footer(); ?>

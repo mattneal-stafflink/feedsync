@@ -305,7 +305,7 @@ $(document).ready( function(jQuery) {
 
 	
 
-	$('#delete-enteries-btn').on('click', function(e) {
+	$('#delete-records-btn').on('click', function(e) {
 	  var $form = $(this).closest('form');
 	  e.preventDefault();
 	  $('#confirm').modal({
@@ -325,11 +325,11 @@ $(document).ready( function(jQuery) {
 	$('input[name="delete_items[]"],#select_all_items').on('click', function(e) {
 
 	  	if( $('input[name="delete_items[]"]:checked').length > 0){
-	  		$('#delete-enteries-btn').prop('disabled',false);
-	  		$('#delete-enteries-btn').addClass('btn-danger');
+	  		$('#delete-records-btn').prop('disabled',false);
+	  		$('#delete-records-btn').addClass('btn-danger');
 	  	} else {
-	  		$('#delete-enteries-btn').prop('disabled',true);
-	  		$('#delete-enteries-btn').removeClass('btn-danger');
+	  		$('#delete-records-btn').prop('disabled',true);
+	  		$('#delete-records-btn').removeClass('btn-danger');
 	  	}
 	});
 
@@ -375,6 +375,112 @@ $(document).ready( function(jQuery) {
 		window.location.replace(newUrl);
 	});
 
+	$('.fs-status-dropdown').on( 'change', function() {
+		let td = $(this).closest('td');
+		let dataID = $(this).closest('tr').data('id');
+		let status = $(this).val();
+		$.ajax({
+			method: "POST",
+			url : fs.ajax_url,
+			data: {
+				action	: "switch_status",
+				id 		: dataID,
+				status  : status
+			},
+			dataType : 'json'
+		})
+		.done(function( response ) {
+			if( response.status == 'success' ) {
+				td.find('.fs-status-text').text(status);
+				td.removeClass().addClass('status fs-status-cell fs-editing-allowed '+status);
+			}
+		});
+	});
+
+	function fs_listings_map() {
+
+		if ($( '#fs-listing-map' ).length == 0) {
+			return false;
+		}
+		var address = $( '#fs-listing-map' ).data( 'address' );
+
+		var address_coordinates = '';
+
+		if ( ! window.google ) {
+			return false;
+		}
+
+		if ( address == '' ) {
+			return false;
+		}
+		
+		var geocoder = new google.maps.Geocoder();
+		geocoder.geocode(
+			{
+				"address": address
+			},
+			function(results) {
+				address_coordinates = results[0].geometry.location;
+				var map             = new google.maps.Map(
+					document.getElementById( 'fs-listing-map' ),
+					{
+						zoom: 14,
+						center: new google.maps.LatLng( address_coordinates.lat().toString() , address_coordinates.lng().toString() ),
+						mapTypeId: google.maps.MapTypeId.ROADMAP
+					}
+				);
+
+				var mapMarker = new google.maps.Marker(
+					{
+
+						position: new google.maps.LatLng( address_coordinates.lat().toString() , address_coordinates.lng().toString() ),
+						draggable: true
+					}
+				);
+
+				map.setCenter( mapMarker.position );
+				mapMarker.setMap( map );
+			}
+		);
+
+	}
+	fs_listings_map();
+
+	if( jQuery('.fs-images-table').length ) {
+
+		/** Wait till all images are loaded before fetching their dimensions */
+		imagesLoaded(document.body, function() {
+
+			jQuery('.fs-images-table').find('img').each( function() {
+			    let width = $(this).get(0).naturalWidth;
+			    let height = $(this).get(0).naturalHeight;
+			    let dimensions = width + ' x '+ height;
+			    console.log($(this).get(0));
+			    $(this).closest('.image-holder').find('.fs-image-dimension').html(dimensions);
+			});
+
+		});
+		
+	}
+
+	/** Test connection **/
+	$('#feedsync_reaxml_test_connection').on('click',function(e) {
+		e.preventDefault();
+		var wrapper = $(this).closest('.form-group');
+		var formData = $(this).closest('form').serialize();
+		$.ajax({
+			method: "POST",
+			url : fs.ajax_url,
+			data: {formData : formData , action: "test_reaxml_fetch_connection"},
+			dataType : 'json'
+		})
+		.done(function( response ) {
+			$(response.message)
+		    .appendTo(wrapper)
+		    .timeout(5000, function(){ this.fadeOut().remove(); });
+		});
+
+	});
 });
 
 /** retain tab even after page reload */
@@ -419,3 +525,11 @@ function readCookie(name) {
 function eraseCookie(name) {
     createCookie(name, "", -1);
 }
+(function($){ 
+    $.fn.timeout = function(ms, callback)
+    {
+        var self = this;
+        setTimeout(function(){ callback.call(self); }, ms);
+        return this;
+    }
+})(jQuery);

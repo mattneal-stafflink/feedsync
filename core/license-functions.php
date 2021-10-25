@@ -145,9 +145,10 @@ function feedsync_license_the_version() {
  * Pluralize words
  *
  * @since 2.2
+ * @since 3.4.5 Removed gettext dependency.
  */
 function feedsync_pluralize( $num, $singleWord, $pluralWord ) {
-    return printf( ngettext( $singleWord, $pluralWord, $num ), $num );
+    return 1 == $num ? $singleWord : $pluralWord;
 }
 
 
@@ -196,7 +197,7 @@ function feedsync_license_activate() {
 
         <div class="alert alert-success">
             <p><strong>Excellent your license is activated for this domain!</strong></p>
-            <p>You have activated <?php echo $result['site_count']; ?> <?php feedsync_pluralize( $result['site_count'], 'site', 'sites' ); ?> and have <?php echo $result['activations_left'] ?> activations left for a total of <?php echo $result['license_limit'] ?> licenses. Your License is valid till <?php echo date('F j, Y, g:i a',strtotime($result['expires'])) ?></p>
+            <p>You have activated <?php echo $result['site_count']; ?> <?php echo feedsync_pluralize( $result['site_count'], 'site', 'sites' ); ?> and have <?php echo $result['activations_left'] ?> activations left for a total of <?php echo $result['license_limit'] ?> licenses. Your License is valid till <?php echo date('F j, Y, g:i a',strtotime($result['expires'])) ?></p>
         </div>
     <?php
     }

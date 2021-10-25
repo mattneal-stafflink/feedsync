@@ -174,9 +174,7 @@
 		}
 
 		function parse_sections($link) {
-            $geo_response       = feedsync_remote_get( $link );
-            $text               = feedsync_remote_retrive_body( $geo_response );
-			$text               = utf8_encode( $text );
+            $text = utf8_encode(file_get_contents($link));
             $this->parse_header($text);
 			$this->parse_definition($text);
 			$this->parse_data($text);
@@ -244,7 +242,7 @@
         /** prepares each property data as an array **/
 		function get_row_data($row) {
 			$row = explode( $this->EOF,trim($row) );
-            array_pop($row);
+            //array_pop($row);
 
 			// make it associative with headers
 			return array_combine($this->definition_array,$row);

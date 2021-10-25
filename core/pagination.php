@@ -68,10 +68,10 @@ class Zebra_Pagination
 
         // by default, we assume there are no records
         // we expect this number to be set after the class is instantiated
-        'records'                   =>  '',
+        'records'                   =>  0,
 
         // records per page
-        'records_per_page'          =>  '',
+        'records_per_page'          =>  0,
 
         // should the links be displayed in reverse order
         'reverse'                   =>  false,
@@ -324,16 +324,17 @@ class Zebra_Pagination
      *
      *  @return integer     Returns the total number of pages, based on the total number of records and the number of
      *                      records to be shown per page.
-     *  @since  3.4.2 Fix: Pagination divide by zero warning.                 
+     *  @since  3.4.6 Fix: Pagination divide by zero warning.  
+     *  @since 3.5.2  Fix: Issues with PHP 8 & pagination issues.            
      */
     public function get_pages()
     {
 
         // return the total number of pages based on the total number of records and number of records to be shown per page
         $per_page = ( int ) $this->_properties['records_per_page'];
-        $per_page = $per_page == 0 ? 1 : $per_page;
-        return @ceil($this->_properties['records'] / $this->_properties['records_per_page']);
-
+        $per_page = $per_page == 0 ? 100  : $per_page;
+        return $this->_properties['records_per_page'] > 0 ? 
+        ceil( $this->_properties['records'] / $this->_properties['records_per_page'] ) : 0;
     }
 
     /**

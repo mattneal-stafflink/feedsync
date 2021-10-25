@@ -38,12 +38,27 @@ class JUPIX_PROCESSOR extends FEEDSYNC_PROCESSOR {
 
     }
 
+    /**
+     * Return mapping from jupix availability to EPL status
+     *
+     * @param      boolean|integer  $status  The status
+     * @param      <type>           $item    The item
+     *
+     * @return     string $status
+     * @since      3.4.5 if feedsync_status exists, update it.
+     */
     function jupix_property_status( $status,$item ) {
 
         $defaults = array();
 
         // Jupix    =>  Easy Property Listings
         $listing_type = $this->guess_property_type($item);
+
+        $sold_stc = get_option('feedsync_jupix_sold_stc_action');
+        $sold_stc = empty( $sold_stc ) ? 'current' : $sold_stc;
+
+        $let_agreed = get_option('feedsync_jupix_let_agreed_action');
+        $let_agreed = empty( $let_agreed ) ? 'current' : $let_agreed;
 
         switch($listing_type) {
 
@@ -54,7 +69,7 @@ class JUPIX_PROCESSOR extends FEEDSYNC_PROCESSOR {
                     '1' 	=>  'offmarket',    // On Hold
                     '2' 	=>  'current',  // For Sale
                     '3' 	=>  'current',  // Under Offer
-                    '4' 	=>  'current', // Sold STC
+                    '4' 	=>  $sold_stc, // Sold STC
                     '5' 	=>  'sold',     // Sold
                     '7' 	=>  'withdrawn' // Withdrawn
                 );
@@ -73,7 +88,7 @@ class JUPIX_PROCESSOR extends FEEDSYNC_PROCESSOR {
                     '1' 	=>  __( 'offmarket' ,		'epl-jpi' ), // On Hold
                     '2' 	=>  __( 'current' ,		'epl-jpi' ), // To Let
                     '3' 	=>  __( 'current' ,		'epl-jpi' ), // References Pending - current
-                    '4' 	=>  __( 'current' ,		'epl-jpi' ), // Let Agreed
+                    '4' 	=>  $let_agreed, // Let Agreed
                     '5' 	=>  __( 'leased' ,		'epl-jpi' ), // Let 
                     '6' 	=>  __( 'withdrawn' ,		'epl-jpi' ) // Withdrawn 
                 );
@@ -95,10 +110,10 @@ class JUPIX_PROCESSOR extends FEEDSYNC_PROCESSOR {
                     '3' 	=>  __( 'current' ,          	'epl-jpi' ),
                     '4' 	=>  __( 'current' ,   		'epl-jpi' ),
                     '5' 	=>  __( 'current' ,       	'epl-jpi' ),
-                    '6' 	=>  __( 'current' ,        	'epl-jpi' ),
+                    '6' 	=>  $sold_stc,
                     '7' 	=>  __( 'sold' ,       		'epl-jpi' ),
                     '8' 	=>  __( 'sold' ,       		'epl-jpi' ),
-                    '9' 	=>  __( 'leased' ,      	'epl-jpi' ),
+                    '9' 	=>  $let_agreed,
                     '10'	=>  __( 'leased' ,		'epl-jpi' ),
                     '11'	=>  __( 'withdrawn' ,		'epl-jpi' )
                 );
@@ -108,12 +123,13 @@ class JUPIX_PROCESSOR extends FEEDSYNC_PROCESSOR {
         $status = isset($defaults[$status]) ? $defaults[$status] : $status ;
         if ( !$this->has_node($item,'feedsync_status')) {
 
-            $fss   = $this->add_node($this->xmlFile,'feedsync_status', $status);
+            $fss   = $this->add_node($this->xmlFile,'feedsync_status', $status );
             $item->appendChild($fss);
 
+        } else {
+            $this->set_node_value( $item, 'feedsync_status', $status );
         }
-
-        return  $status ;
+        return  strtolower($status);
     }
 
     function guess_property_type($item) {
@@ -192,6 +208,25 @@ class JUPIX_PROCESSOR extends FEEDSYNC_PROCESSOR {
         }
 
         $this->logger_log('feedsyncUniqueID processed : '.$feedsync_unique_id);
+
+        $status =   $this->get_node_value($item,'availability');
+        $status =   $this->jupix_property_status( $status,$item );
+
+        if( 'delete' === $status ) {
+            $publish_status = 'trash';
+        } else {
+            $publish_status = $this->get_publish_status($status);
+        }
+        
+         // add feedsyncPostStatus if its not there already
+         if( ! $this->has_node($item,'feedsyncPostStatus') ) {
+            $element    = $this->add_node($node_to_add,'feedsyncPostStatus',$publish_status);
+            $item->appendChild($element);
+
+        } else {
+            // if node already exists, just update the value
+            $item = $this->set_node_value($item,'feedsyncPostStatus',$publish_status);
+        }
 
         if(!empty($this->xmlFile) ) {
             $this->xmlFile->save($this->path);
@@ -461,7 +496,7 @@ class JUPIX_PROCESSOR extends FEEDSYNC_PROCESSOR {
 
                     /** update if we have updated data **/
                     if(  strtotime($exists->mod_date) < strtotime($db_data['mod_date']) ) {
-
+                        
                         $this->logger_log('Updated content detected. New Mode Time : '.$db_data['mod_date'].'. Old Mode Time : '.$exists->mod_date);
 
                         /** add firstDate node to xml if its already not there **/
@@ -539,7 +574,7 @@ class JUPIX_PROCESSOR extends FEEDSYNC_PROCESSOR {
         }
 
         try {
-            if( rename($this->path,$this->get_path('processed').basename($this->path) ) ) {
+            if( $this->move_processed_file( $this->path ) ) {
 
                 $this->logger_log('---- File successfully moved to processed folder ----');
                 $this->complete_log();

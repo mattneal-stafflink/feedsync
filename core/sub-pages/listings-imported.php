@@ -15,58 +15,52 @@ Version: 2.0
 	require_once('../../config.php');
 	require_once('../functions.php');
 	do_action('init');
-	
+
 	$page_now = 'imported';
 	get_header('Imported');
 	get_listings_sub_header( $page_now );
 	$new_array = array();
 ?>
 
-		<div class="panel panel-default">
+		<div class="panel panel-default panel-imported">
 		  <!-- Default panel contents -->
 		  <div class="panel-heading">XML Files</div>
 
 			<?php
-			# The current directory
-			$directory = dir(PROCESSED_PATH);
 
-			# If you want to turn on Extension Filter, then uncomment this:
-			### $allowed_ext = array(".sample", ".png", ".jpg", ".jpeg", ".txt", ".doc", ".xls");
-			$allowed_ext = array(".xml", ".XML");
+			$all_processed = get_recursive_files_list( get_path('processed'),"xml|XML" );
+			$new_array = [];
+			if( !empty( $all_processed ) ) {
+				$i = 0;
+				foreach( $all_processed  as $single_processed ) {
+					$temp_info = stat( $single_processed );
+					$new_array[$i][0] = str_replace( trailingslashit( untrailingslashit( get_path('processed') ) ), '', $single_processed );
+					$new_array[$i][1] = $temp_info[7];
+					$new_array[$i][2] = $temp_info[9];
+					$new_array[$i][3] = date("F d, Y", $new_array[$i][2]);
+					$new_array[$i][4] = $single_processed;
+					$i++;
+				}
 
-
-
-			## Description of the soft: list_dir_files.php
-			## Major credits: phpDIRList 2.0 -(c)2005 Ulrich S. Kapp :: Systemberatung ::
+				
+			}
 
 			$do_link = TRUE;
 			$sort_what = 2; //0- by name; 1 - by size; 2 - by date
 			$sort_how = 1; //0 - ASCENDING; 1 - DESCENDING
 
 			$sort_what =
-				( isset($_GET['sort_what']) && in_array($_GET['sort_what'], array(0,1,2)) ) ? 
+				( isset($_GET['sort_what']) && in_array($_GET['sort_what'], array(0,1,2)) ) ?
 				$_GET['sort_what'] : $sort_what;
 
 			$sort_how =
-				( isset($_GET['sort_how']) && in_array($_GET['sort_how'], array(0,1)) ) ? 
+				( isset($_GET['sort_how']) && in_array($_GET['sort_how'], array(0,1)) ) ?
 				$_GET['sort_how'] : $sort_how;
 
 			$sort_to = $sort_how == 0 ? 1 : 0;
 
-			# # #
-			function dir_list($dir){
-				$i=0;
-				$dl = array();
-				if ($hd = opendir($dir))    {
-					while ($sz = readdir($hd)) {
-						if (preg_match("/^\./",$sz)==0) $dl[] = $sz;$i.=1;
-					}
-				closedir($hd);
-				}
-				asort($dl);
-				return $dl;
-			}
 			if ($sort_how == 0) {
+
 				function compare0($x, $y) {
 					if ( $x[0] == $y[0] ) return 0;
 					else if ( $x[0] < $y[0] ) return -1;
@@ -82,7 +76,9 @@ Version: 2.0
 					else if ( $x[2] < $y[2] ) return -1;
 					else return 1;
 				}
-			}else{
+
+			} else {
+				
 				function compare0($x, $y) {
 					if ( $x[0] == $y[0] ) return 0;
 					else if ( $x[0] < $y[0] ) return 1;
@@ -100,30 +96,7 @@ Version: 2.0
 				}
 
 			}
-
-			##################################################
-			#    We get the information here
-			##################################################
-
-			$i = 0;
-			while($file=$directory->read()) {
-				//$file = strtolower($file);
-				$ext = strrchr($file, '.');
-				if (isset($allowed_ext) && (!in_array($ext,$allowed_ext)))
-					{
-						// dump
-					}
-				else {
-					$temp_info = stat(PROCESSED_PATH.$file);
-					$new_array[$i][0] = $file;
-					$new_array[$i][1] = $temp_info[7];
-					$new_array[$i][2] = $temp_info[9];
-					$new_array[$i][3] = date("F d, Y", $new_array[$i][2]);
-					$i = $i + 1;
-				}
-			}
-			$directory->close();
-
+			
 			##################################################
 			# We sort the information here
 			#################################################
@@ -155,7 +128,7 @@ Version: 2.0
 
 			// how many records should be displayed on a page?
 	        $records_per_page = get_option('feedsync_pagination');
-	        
+
 	        global $pagination;
 	        // instantiate the pagination object
 	        $pagination = new Zebra_Pagination();
@@ -191,20 +164,20 @@ Version: 2.0
 
 					<?php
 					foreach($results as $result) {
-						if (!$do_link) {
-							$line = "<tr><td>" .
-											$result[0] .
+						if ( ! $do_link ) {
+							$line = "<tr><td class='filename'>" .
+											basename($result[0]) .
 											"</td><td>" .
 											number_format(($result[1]/1024)) .
 											"k";
 							$line = $line  . "</td><td>" . $result[3] . "</td></tr>";
-						}else{
-							$line = '<tr><td><A HREF="'.PROCESSED_URL .
+						} else {
+							$line = '<tr><td class="filename"><a href="'.PROCESSED_URL .
 											$result[0] . '">' .
-											$result[0] .
-											"</A></td><td>";
+											basename($result[0]) .
+											"</a></td><td class='size'>";
 							$line = $line . number_format(($result[1]/1024)) .
-											"k"  . "</td><td>" .
+											"k"  . "</td><td class='date'>" .
 											$result[3] . "</td></tr>";
 						}
 						echo $line;

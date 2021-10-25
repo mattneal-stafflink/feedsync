@@ -22,6 +22,8 @@ class FEEDSYNC_SETTINGS {
 						($section_id == 'expert_agent' && get_option('feedtype') != 'expert_agent') ||
 						($section_id == 'eac-api' && get_option('feedtype') != 'eac') ||
 						($section_id == 'jupix' && get_option('feedtype') != 'jupix') ||
+						($section_id == 'xml2u' && get_option('feedtype') != 'xml2u') ||
+						($section_id == 'reaxml_fetch' && get_option('feedtype') != 'reaxml_fetch') ||
 						($section_id == 'blm' && get_option('feedtype') != 'blm')
 					) {
 						continue;
@@ -57,6 +59,7 @@ class FEEDSYNC_SETTINGS {
 								}
 								echo '<div class="'.$classes.'" id="'.$section_id.'">';
 									echo '<legend>'.$section['label'].'</legend>';
+									echo '<h4>'.$section["intro"].'</h4>';
 									$this->Render_section($section);
 								echo '</div>';
 							}
@@ -102,12 +105,13 @@ class FEEDSYNC_SETTINGS {
 				'type'	=>	'select',
 				'opts'	=>	array(
 					'reaxml'		=>	__('REAXML (Australian)','epl-feedsync'),
+					'reaxml_fetch'	=>	__('REAXML Fetch','epl-feedsync'),
 					'rockend'		=>	__('Rockend Rest (Australian)','epl-feedsync'),
 					'eac'			=>	__('EAC (Australian)','epl-feedsync'),
-
 					'blm'			=>	__('BLM (UK)','epl-feedsync'),
 					'expert_agent'		=>	__('Expert Agent (UK)','epl-feedsync'),
-					'jupix'			=>	__('Jupix (UK)','epl-feedsync')
+					'jupix'			=>	__('Jupix (UK)','epl-feedsync'),
+					'xml2u'			=>	__('XML2U','epl-feedsync')
 				),
 				'default'	=>	'reaxml',
 				'help'		=>	__('Select the format of your listing feed.','epl-feedsync')
@@ -212,6 +216,158 @@ class FEEDSYNC_SETTINGS {
 
 		$feedsync_section['fields'] 		= $fields;
 		$feedsync_fields['general-settings'] 		= $feedsync_section;
+
+		/** Reaxml settings section */
+		$feedsync_section = array(
+			'label'		=>	'Publishing',
+			'intro'		=>	'Please choose WP post status',
+		);
+		
+		$publish_opts = array(
+			'publish'   =>  __('Publish','epl-feedsync'),
+			'draft'     =>  __('Draft','epl-feedsync'),
+			'private'   =>  __('Private','epl-feedsync'),
+			'trash'		=>	__('Trash','epl-feedsync'),
+		);
+		
+		$fields = apply_filters('feedsync_reaxml_settings',array(
+		
+			array(
+				'name'	    =>	'reaxml_map_status_current',
+				'label'	    =>	__('Current','epl-feedsync'),
+				'type'	    =>	'select',
+				'opts'	    =>	$publish_opts,
+				'default'	=>	'publish',
+				'help'		=>	__('Please choose WP post status that corresponds to reaxml current status.','epl-feedsync')
+			),
+			array(
+				'name'	    =>	'reaxml_map_status_sold',
+				'label'	    =>	__('Sold','epl-feedsync'),
+				'type'	    =>	'select',
+				'opts'	    =>	$publish_opts,
+				'default'	=>	'publish',
+				'help'		=>	__('Please choose WP post status that corresponds to reaxml sold status.','epl-feedsync')
+			),
+			array(
+				'name'	    =>	'reaxml_map_status_leased',
+				'label'	    =>	__('Leased','epl-feedsync'),
+				'type'	    =>	'select',
+				'opts'	    =>	$publish_opts,
+				'default'	=>	'publish',
+				'help'		=>	__('Please choose WP post status that corresponds to reaxml leased status.','epl-feedsync')
+			),
+			array(
+				'name'	    =>	'reaxml_map_status_withdrawn',
+				'label'	    =>	__('Withdrawn','epl-feedsync'),
+				'type'	    =>	'select',
+				'opts'	    =>	$publish_opts,
+				'default'	=>	'private',
+				'help'		=>	__('Please choose WP post status that corresponds to reaxml withdrawn status.','epl-feedsync')
+			),
+			array(
+				'name'	    =>	'reaxml_map_status_offmarket',
+				'label'	    =>	__('Offmarket','epl-feedsync'),
+				'type'	    =>	'select',
+				'opts'	    =>	$publish_opts,
+				'default'	=>	'draft',
+				'help'		=>	__('Please choose WP post status that corresponds to reaxml offmarket status.','epl-feedsync')
+			),
+			array(
+				'name'	    =>	'reaxml_map_status_deleted',
+				'label'	    =>	__('Deleted','epl-feedsync'),
+				'type'	    =>	'select',
+				'opts'	    =>	$publish_opts,
+				'default'	=>	'trash',
+				'help'		=>	__('Please choose WP post status that corresponds to reaxml deleted status.','epl-feedsync')
+			),
+		
+		) );
+		
+		$feedsync_section['fields'] 		= $fields;
+		$feedsync_fields['reaxml'] 		    = $feedsync_section;
+
+		/** REAXML Fetch option */
+		$feedsync_section = array(
+			'label'		=>	'Fetch',
+			'intro'		=>	'',
+		);
+
+		$fields = apply_filters('feedsync_reaxml_fetch',array(
+
+			array(
+				'name'		=>	'feedsync_reaxml_remote_host',
+				'label'		=>	__('Host Address','epl-feedsync'),
+				'type'		=>	'text',
+				'help'		=>	__('If your feed provider requires you to pull files remotely, please fill host, username & pass.','epl-feedsync')
+			),
+			array(
+				'name'		=>	'feedsync_reaxml_remote_user',
+				'label'		=>	__('Host Username','epl-feedsync'),
+				'type'		=>	'text',
+				'help'		=>	__('Only requires if your feed needs to be fetch remotely')
+
+			),
+			array(
+				'name'		=>	'feedsync_reaxml_remote_pass',
+				'label'		=>	__('Host Password','epl-feedsync'),
+				'type'		=>	'text',
+				'help'		=>	__('Only requires if your feed needs to be fetch remotely')
+
+			),
+			array(
+				'name'	    =>	'feedsync_reaxml_remote_is_ssl',
+				'label'	    =>	__('Is SSL only FTP ?','epl-feedsync'),
+				'type'	    =>	'select',
+				'opts'	    =>	[
+					'yes'	=>	'Yes',
+					'no'	=>	'No'
+				],
+				'default'	=>	'yes',
+				'help'		=>	'Choose yes if FTP allows only ssl/secure connections'
+			),
+			array(
+				'name'	    =>	'feedsync_reaxml_remote_passive',
+				'label'	    =>	__('Passive Mode ?','epl-feedsync'),
+				'type'	    =>	'select',
+				'opts'	    =>	[
+					
+					'no'	=>	'No',
+					'yes'	=>	'Yes'
+				],
+				'default'	=>	'no',
+				'help'		=>	'Choose yes if your server is behind firewall'
+			),
+			array(
+				'name'		=>	'feedsync_reaxml_remote_port',
+				'label'		=>	__('Port','epl-feedsync'),
+				'type'		=>	'text',
+				'help'		=>	'Keep port as 21 if not sure',
+				'default'	=>	'21'
+
+			),
+			array(
+				'name'		=>	'feedsync_reaxml_remote_move_files',
+				'label'		=>	'Move Files? When move is enabled the source files will be removed once copied',
+				'type'		=>	'checkbox_single',
+				'opts'		=>	array(
+					'1'			=>	'',
+				),
+				'default'	=>	'0',
+				'help'		=>	''
+			),
+			array(
+				'name'		=>	'feedsync_reaxml_test_connection',
+				'id'		=>	'feedsync_reaxml_test_connection',
+				'label'		=>	'',
+				'value'		=>	__('Test Connection','epl-feedsync'),
+				'type'		=>	'button'
+
+			)
+
+		) );
+
+		$feedsync_section['fields'] 			= $fields;
+		$feedsync_fields['reaxml_fetch'] 		= $feedsync_section;
 
 		/** eac setting section **/
 		$feedsync_section = array(
@@ -601,6 +757,26 @@ conjunction with STAT: "SOLD".')
 				),
 				'default'	=>	'withdrawn',
 			),
+			array(
+				'name'		=>	'feedsync_jupix_let_agreed_action',
+				'label'		=>	__('Treat LET Agreed Listings as','epl-feedsync'),
+				'type'		=>	'select',
+				'opts'		=> array(
+					'current'			=>	'Current',
+					'leased'			=>	'Leased'
+				),
+				'default'	=>	'current',
+			),
+			array(
+				'name'		=>	'feedsync_jupix_sold_stc_action',
+				'label'		=>	__('Treat Sold STC Listings as','epl-feedsync'),
+				'type'		=>	'select',
+				'opts'		=> array(
+					'current'			=>	'Current',
+					'sold'				=>	'Sold'
+				),
+				'default'	=>	'current',
+			),
 
 
 
@@ -608,6 +784,26 @@ conjunction with STAT: "SOLD".')
 
 		$feedsync_section['fields'] 			= $fields;
 		$feedsync_fields['jupix'] 				= $feedsync_section;
+
+		/** XML2U settings section **/
+		$feedsync_section = array(
+			'label'		=>	'XML2U',
+			'intro'		=>	'',
+		);
+
+		$fields = apply_filters('feedsync_jupix',array(
+
+			array(
+				'name'		=>	'feedsync_xml2u_feed_urls',
+				'label'		=>	__('Feed URLs ( one per line )','epl-feedsync'),
+				'type'		=>	'textarea',
+				'help'		=>	__('Source Feed URLs of Agents','epl-feedsync')
+			)
+
+		) );
+
+		$feedsync_section['fields'] 			= $fields;
+		$feedsync_fields['xml2u'] 				= $feedsync_section;
 
 		/** License setting section **/
 		$feedsync_section = array(
@@ -738,7 +934,7 @@ Software License. Set these so you can register this website with your license s
 	function render_Section($section) {
 		echo '<section class="feedsync-setting-section">';
 			foreach($section['fields'] as $field) {
-				echo '<fieldset class="form-group">';
+				echo '<fieldset class="form-group form-field-type-'.$field['type'].'">';
 				echo '<label for="'.$field["name"].'">'.$field["label"].'</label>';
 				$this->render_field($field, get_option($field["name"],false) );
 				echo '</fieldset>';
@@ -830,17 +1026,26 @@ Software License. Set these so you can register this website with your license s
 			case 'checkbox_single':
 				if(!empty($field['opts'])) {
 					foreach($field['opts'] as $k=>$v) {
+						
 						$checked = '';
+						
 						if(!empty($val)) {
 							$checkbox_single_options = apply_filters('epl_checkbox_single_check_options', array(1,'yes','on','true'));
 							if( $k == $val || in_array($val,$checkbox_single_options) ) {
 								$checked = 'checked="checked"';
 							}
 						}
-						if(count($field['opts']) == 1)
+						if(count($field['opts']) == 1) {
 							$v = $field['label'];
-						echo '<input type="checkbox" class="form-control" name="'.$field['name'].'" id="'.$field['name'].'_'.$k.'" value="'.$k.'" '.$checked.' /> <label for="'.$field['name'].'_'.$k.'">'.__($v, 'epl-feedsync' ).'</label>';
+							
+						}
+						echo '<input type="hidden" name="'.$field['name'].'" value="0" /> ';	
+						echo '<div class="form-field-options-wrap">
+								<input type="checkbox" class="form-control" name="'.$field['name'].'" id="'.$field['name'].'_'.$k.'" value="'.$k.'" '.$checked.' /> 
+								<label for="'.$field['name'].'_'.$k.'">'.__($v, 'epl-feedsync' ).'</label>
+							</div>';
 					}
+					
 				}
 				break;
 			case 'radio':
@@ -887,7 +1092,7 @@ Software License. Set these so you can register this website with your license s
 				break;
 			case 'button':
 				$classes = isset($field['class']) ? $field['class'] : '';
-				echo '<input type="button" name="'.$field['name'].'" id="'.$field['name'].'" value="'.$field['value'].'" class="form-control '.$classes.'" />';
+				echo '<input type="button" name="'.$field['name'].'" id="'.$field['name'].'" value="'.$field['value'].'" class=" btn btn-primary form-control '.$classes.'" />';
 				break;
 			case 'locked':
 				$atts = '';

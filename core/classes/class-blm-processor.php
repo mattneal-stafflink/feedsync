@@ -142,6 +142,23 @@ class BLM_PROCESSOR extends FEEDSYNC_PROCESSOR {
 
         $this->logger_log('feedsyncUniqueID processed : '.$feedsync_unique_id);
 
+        $status         = $item->getAttribute('status');
+
+        if( 'delete' === $status ) {
+            $publish_status = 'trash';
+        } else {
+            $publish_status = $this->get_publish_status($status);
+        }
+        
+        // add feedsyncPostStatus if its not there already
+         if( ! $this->has_node($item,'feedsyncPostStatus') ) {
+            $element    = $this->add_node($node_to_add,'feedsyncPostStatus',$publish_status);
+            $item->appendChild($element);
+
+        } else {
+            // if node already exists, just update the value
+            $item = $this->set_node_value($item,'feedsyncPostStatus',$publish_status);
+        }
 
         if(!empty($this->xmlFile) ) {
             $this->xmlFile->save($this->path);
@@ -437,7 +454,7 @@ class BLM_PROCESSOR extends FEEDSYNC_PROCESSOR {
         }
 
         try {
-            if( rename($this->path,$this->get_path('processed').basename($this->path) ) ) {
+            if( $this->move_processed_file( $this->path ) ) {
 
                 $this->logger_log('---- File successfully moved to processed folder ----');
                 $this->complete_log();
@@ -475,19 +492,24 @@ class BLM_PROCESSOR extends FEEDSYNC_PROCESSOR {
             foreach ($imgs as $k=>$img) {
                 $img_name = trim($img->nodeValue);
                 if(!empty($img_name)) {
-                    $img_name   = basename($img_name);
-                    $img_path   = $this->get_path('input').$img_name;
-                    $img_url    =  $this->get_url('input').$img_name;
-
-                    if( file_exists($img_path) ){
-                        if( rename ( $img_path,  get_path('images').$img_name ) ) {
+                    if (filter_var($img_name, FILTER_VALIDATE_URL) === FALSE) {
+                        $img_name   = basename($img_name);
+                        $img_path   = $this->get_path('input').$img_name;
+                        $img_url    =  $this->get_url('input').$img_name;
+    
+                        if( file_exists($img_path) ){
+                            if( rename ( $img_path,  get_path('images').$img_name ) ) {
+                                $img_url    =  $this->get_url('images').$img_name;
+                            }
+                        } else {
                             $img_url    =  $this->get_url('images').$img_name;
                         }
+    
+                        $imgs->item($k)->setAttribute('url', $img_url);
                     } else {
-                        $img_url    =  $this->get_url('images').$img_name;
+                        $imgs->item($k)->setAttribute('url', $img_name );
                     }
-
-                    $imgs->item($k)->setAttribute('url', $img_url);
+                    
 
                 }
 

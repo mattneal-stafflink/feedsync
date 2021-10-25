@@ -91,6 +91,11 @@ function define_constants() {
 
     if( !defined('FS_TABLE_PREFIX') )
         define('FS_TABLE_PREFIX', 'fs_' );
+    
+    if( !defined('PLUGINS_PATH') )
+        define('PLUGINS_PATH',  SITE_ROOT.'plugins'.DS );
+    
+    define( 'KB_IN_BYTES', 1024 );
 }
 
 add_action('init_constants','define_constants',1);
@@ -137,6 +142,13 @@ function init_url_constants() {
 
     if( !defined('LOGS_FOLDER_URL') )
         define('LOGS_FOLDER_URL',  SITE_URL.'logs/' );
+    
+    /**
+     * path for which session cookie is stored
+     * @since 3.5
+     */
+    if( !defined('COOKIEPATH') )
+        define( 'COOKIEPATH', preg_replace( '|https?://[^/]+|i', '', SITE_URL ) );
 
 }
 

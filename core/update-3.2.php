@@ -73,6 +73,7 @@ function upgrade_version_3_2() {
     switch($feedtype) {
 
         case 'reaxml' :
+        case 'reaxml_fetch' :
         case 'blm' :
         case 'expert_agent' :
         case 'rockend' :

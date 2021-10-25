@@ -31,11 +31,13 @@ define('FEEDSYNC_ADMIN', 'admin' );
 /** Password to access feedsync  */
 define('FEEDSYNC_PASS', 'password' );
 
-/** Set to true to enable listing database reset and selecting and deleting entries */
+/** Set to true to enable listing database reset, deleting and modifying entries */
 define('FEEDSYNC_RESET', false );
 
+/** Set to true to enable listing status changing and deleting entries */
+define('FEEDSYNC_EDIT', false );
 
-/** Uncomment to enable setting of site URL  **/
+/** Uncomment to enable setting of site URL, make sure there is a / at the end.  **/
 //define('SITE_URL', 'http://YOUR_URL/XML/feedsync/' );
 
 /** Uncomment to disable and hide the settings page **/
@@ -72,3 +74,8 @@ if( defined('DIRECTORY_SEPARATOR') ){
 	define('DS','/');
 }
 define('SITE_ROOT',dirname(__FILE__).DS );
+/**
+ * path for which session cookie is stored, uncomment to override cookiepath.
+ * @since 3.5
+ */
+//define( 'COOKIEPATH', preg_replace( '|https?://[^/]+|i', '', SITE_URL ) );

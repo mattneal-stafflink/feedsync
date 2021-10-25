@@ -17,7 +17,7 @@ Version: 2.0
 	$page_now = 'help';
 	do_action('init');
 
-	
+
 	get_header('help');
 
 	$access_key_enabled 	= get_option('feedsync_enable_access_key');
@@ -370,6 +370,8 @@ Version: 2.0
 		<li>&#38;agent_id=123456 : output listings by office id.</li>
 		<li>&#38;date=today : output listings by the current date.</li>
 		<li>&#38;days_back=10 : output listings for the past number of specified days.</li>
+		<li>&#38;days_before=10 : output listings for that have mod date smaller than then specified days.</li>
+		<li>&#38;days_range=10-20 : output listings that have mod date in range between specified days.</li>
 		<li>&#38;minutes_back=10 : output listings for the past number of minutes.</li>
 		<li>&#38;street=Smith Street : output listings by street name.</li>
 		<li>&#38;suburb=Sydney : output listings by suburb.</li>
@@ -377,6 +379,7 @@ Version: 2.0
 		<li>&#38;postcode=6000 output listings by postcode.</li>
 		<li>&#38;country= output listings by country.</li>
 		<li>&#38;listing_agent= output listings listing agent.</li>
+		<li>&#38;per_page= limit the listing output, default is 1000 records.</li>
 	</ol>
 
 	<h3 style="margin-top:2em;">Exporting Agents</h3>

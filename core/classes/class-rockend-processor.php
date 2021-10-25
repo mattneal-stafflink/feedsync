@@ -336,6 +336,24 @@ class ROCKEND_PROCESSOR extends FEEDSYNC_PROCESSOR {
 
         $this->logger_log('feedsyncUniqueID processed : '.$feedsync_unique_id);
 
+        $status         = $item->getAttribute('status');
+
+        if( 'delete' === $status ) {
+            $publish_status = 'trash';
+        } else {
+            $publish_status = $this->get_publish_status($status);
+        }
+        
+        // add feedsyncPostStatus if its not there already
+         if( ! $this->has_node($item,'feedsyncPostStatus') ) {
+            $element    = $this->add_node($node_to_add,'feedsyncPostStatus',$publish_status);
+            $item->appendChild($element);
+
+        } else {
+            // if node already exists, just update the value
+            $item = $this->set_node_value($item,'feedsyncPostStatus',$publish_status);
+        }
+
         if(!empty($this->xmlFile) ) {
             $this->xmlFile->save($this->path);
         }
@@ -470,7 +488,7 @@ class ROCKEND_PROCESSOR extends FEEDSYNC_PROCESSOR {
         $this->logger_log('---- File processing complete ----');
 
         try {
-            if( rename($this->path,$this->get_path('processed').basename($this->path) ) ) {
+            if( $this->move_processed_file( $this->path ) ) {
 
                 $this->logger_log('---- File successfully moved to processed folder ----');
                 $this->complete_log();

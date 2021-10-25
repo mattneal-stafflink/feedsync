@@ -18,6 +18,9 @@
 		<li class="<?php echo $page_now == 'offmarket' ? 'active':''; ?>">
 			<a href="<?php echo CORE_URL.'sub-pages/listings-offmarket.php' ?>">Off Market</a>
 		</li>
+		<li class="<?php echo $page_now == 'deleted' ? 'active':''; ?>">
+			<a href="<?php echo CORE_URL.'sub-pages/listings-deleted.php' ?>">Deleted</a>
+		</li>
 		<li class="<?php echo $page_now == 'imported' ? 'active':''; ?>">
 			<a href="<?php echo CORE_URL.'sub-pages/listings-imported.php' ?>">Imported</a>
 		</li>

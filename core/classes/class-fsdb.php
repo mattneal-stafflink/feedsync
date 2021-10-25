@@ -830,6 +830,7 @@ class fsdb {
 			'listing'		=>	'feedsync',
 			'listing_meta'	=>	'listing_meta',
 			'agent'			=>	'feedsync_users',
+			'agent_meta'	=>	'feedsync_users_meta',
 			'temp'			=>	'feedsync_temp',
 			'logs'			=>	'feedsync_logs',
 			'options'		=>	'feedsync_options'
@@ -1364,7 +1365,7 @@ class fsdb {
 
 		if ( ! $this->dbh && $allow_bail ) {
 
-			$message = '<h1>' . __( 'Error establishing a database connection' ) . "</h1>\n";
+			$message = '<h2>' . __( 'Error establishing a database connection' ) . "</h2>\n";
 
 			$message .= '<p>' . sprintf(
 				/* translators: 1: config.php. 2: database host */
@@ -2987,7 +2988,10 @@ class fsdb {
 	public function bail( $message, $error_code = '500' ) {
 		if ( !$this->show_errors ) {
 			if ( class_exists( 'FS_Error', false ) ) {
-				$this->error = new FS_Error($error_code, $message);
+				global $sitewide_notices;
+    			
+				$this->error = new FS_Error( 'danger', __( $message, "feedsync" ) );
+				$sitewide_notices[] = $this->error;
 			} else {
 				$this->error = $message;
 			}
