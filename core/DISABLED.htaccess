@@ -1,0 +1,15 @@
+RewriteEngine On
+RewriteBase /feedsync/
+
+# rewrite to core/pages/
+RewriteCond %{DOCUMENT_ROOT}/feedsync/core/pages/$1.php -f
+RewriteRule ^(.+?)/?$ core/pages/$1.php [L]
+
+# rewrite to core/sub-pages/
+RewriteCond %{DOCUMENT_ROOT}/feedsync/core/sub-pages/$1.php -f
+RewriteRule ^(.+?)/?$ core/sub-pages/$1.php [L]
+
+# rewrite to core/
+RewriteCond %{DOCUMENT_ROOT}/feedsync/core/$1.php -f
+RewriteRule ^(.+?)/?$ core/$1.php [L]
+
