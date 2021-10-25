@@ -251,8 +251,8 @@ Version: 2.0
 	<ol>
 		<li>&#63;action=do_output : this is required.</li>
 		<li>&#38;access_key=<?php echo $access_key_raw; ?> : Access Key is (<?php echo $access_key_enabled; ?>) this is required when on/enabled.</li>
-		<li>&#38;type=all or a singular value of ( all, residential, rental, land, rural, commercial, business, commercial_land).</li>
-		<li>&#38;status=current or a singular value of (current, sold, leased, withdrawn, offmarket, all).</li>
+		<li>&#38;type=all or a singular value of ( all, residential, rental, land, rural, commercial, business, commercial_land). Comma separate for multiple.</li>
+		<li>&#38;status=current or a singular value of (current, sold, leased, withdrawn, offmarket, all). Comma separate for multiple.</li>
 	</ol>
 
 	<p>Adjust the type=residential to the post type you want to export. Available types for <strong><?php echo $feed_type; ?></strong> are:</p>
@@ -367,7 +367,7 @@ Version: 2.0
 	<ol>
 		<li>&#63;action=do_output : this is required.</li>
 		<li>&#38;access_key=<?php echo $access_key_raw; ?> : Access Key is (<?php echo $access_key_enabled; ?>) this is required when on/enabled.</li>
-		<li>&#38;agent_id=123456 : output listings by office id.</li>
+		<li>&#38;agent_id=123456 : output listings by office id. Comma separate for multiple.</li>
 		<li>&#38;date=today : output listings by the current date.</li>
 		<li>&#38;days_back=10 : output listings for the past number of specified days.</li>
 		<li>&#38;days_before=10 : output listings for that have mod date smaller than then specified days.</li>
@@ -387,6 +387,14 @@ Version: 2.0
 	<p>You can export all agents present in your database for import.</p>
 
 	<div class="alert alert-success"><?php echo SITE_URL; ?>?action=do_output<?php echo $access_key; ?>&#38;type=agents</div>
+	
+	<p>You can output listings by additional options indicated below.</p>
+
+	<ol>
+		<li>&#63;action=do_output : this is required.</li>
+		<li>&#38;access_key=<?php echo $access_key_raw; ?> : Access Key is (<?php echo $access_key_enabled; ?>) this is required when on/enabled.</li>
+		<li>&#38;agent_id=123456 : output listings by office id. Comma separate for multiple.</li>
+	</ol>
 
 
 <?php echo get_footer(); ?>

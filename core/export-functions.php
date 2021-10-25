@@ -127,7 +127,18 @@ function feedsync_form_do_output() {
 
 
     if($type == 'agents') {
+
         $query      = "SELECT * FROM ".fsdb()->agent." WHERE 1 = 1 ";
+
+        $agent_id   = isset($_GET['agent_id']) ? trim( $_GET['agent_id'] ) : '';
+
+        if( !empty( $agent_id ) ) {
+            $agent_id = array_map( 'trim', explode( ',', $agent_id ) );
+        
+            if ( count( $agent_id ) ) {
+                $query .= " AND ".fsdb()->agent.".office_id IN ('" . implode( "','", $agent_id ) . "') ";
+            }
+        }
     } else {
 
         $query      = "SELECT * FROM ".fsdb()->listing." WHERE 1 = 1 AND address != '' ";

@@ -178,8 +178,8 @@ function instantiate_options() {
 add_action('init_options','instantiate_options',1);
 
 // IMPORTANT: edit class-feedsync-upgrade.php and add version.
-$current_version    = '3.5.4';
-$build_number       = '21-1013';
+$current_version    = '3.5.5';
+$build_number       = '21-1020';
 
 $application_name = 'FeedSync REAXML Processor';
 

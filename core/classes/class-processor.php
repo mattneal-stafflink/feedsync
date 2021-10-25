@@ -717,7 +717,7 @@ class FEEDSYNC_PROCESSOR {
 
         /** Image order change */
 
-        $item = $this->detect_image_order_change( $item );
+        $item = $this->detect_image_order_change( $item, $image_mod_date );
 
         /** Sold Date  */
 
@@ -781,7 +781,7 @@ class FEEDSYNC_PROCESSOR {
         return $item;
     }
 
-    public function detect_image_order_change( $item ) {
+    public function detect_image_order_change( $item, $image_mod_date ) {
 
         /** Image order change detection */
         $fs_unique_id = $this->get_node_value($item,'feedsyncUniqueID');
@@ -792,56 +792,60 @@ class FEEDSYNC_PROCESSOR {
                 $listing_mod_date       = $item->getAttribute('modTime');
                 $listing_mod_date       = feedsync_format_date( $listing_mod_date );
 
-                if( ( strtotime($listing_mod_date ) > strtotime( $listing_from_db->mod_date ) ) ) {
-                        // Listing mod date is already updated.
-                } else {
-
-                        if( !empty( $listing_from_db ) ) :
+                //check & update listing mod date if image order is changed so that it doesn't get skipped during import.
+                
+                if( !empty( $listing_from_db ) ) :
                                 
-                                /** Load existing xml from database */
-                                $existing_xml = new DOMDocument('1.0', 'UTF-8');
-                                $existing_xml->preserveWhiteSpace = FALSE;
-                                $existing_xml->recover = TRUE;
-                                $existing_xml->loadXML($listing_from_db->xml);
-                                $existing_xml->formatOutput = TRUE;
-                                $existing_listing = $existing_xml->getElementsByTagName('*');
-                                $existing_listing_item  = $existing_listing->item(0);
+                        /** Load existing xml from database */
+                        $existing_xml = new DOMDocument('1.0', 'UTF-8');
+                        $existing_xml->preserveWhiteSpace = FALSE;
+                        $existing_xml->recover = TRUE;
+                        $existing_xml->loadXML($listing_from_db->xml);
+                        $existing_xml->formatOutput = TRUE;
+                        $existing_listing = $existing_xml->getElementsByTagName('*');
+                        $existing_listing_item  = $existing_listing->item(0);
 
-                                // existing images
-                                $existing_imgs = $this->get_nodes($existing_listing_item,'img');
+                        $db_img_mod_time = $this->get_node_value($existing_listing_item,'feedsyncImageModtime');
 
-                                $existing_img_array = [];
+                        // existing images
+                        $existing_imgs = $this->get_nodes($existing_listing_item,'img');
 
-                                if( $existing_imgs->length > 0 ) {
-                        
-                                        foreach ($existing_imgs as $k => $existing_img ) {
-                                                $existing_img_array[ $existing_img->getAttribute('id') ] = $existing_img->getAttribute('url');
-                                        }
+                        $existing_img_array = [];
+
+                        if( $existing_imgs->length > 0 ) {
+                
+                                foreach ($existing_imgs as $k => $existing_img ) {
+                                        $existing_img_array[ $existing_img->getAttribute('id') ] = $existing_img->getAttribute('url');
                                 }
+                        }
 
-                                // new images
-                                $new_imgs = $this->get_nodes($item,'img');
+                        // new images
+                        $new_imgs = $this->get_nodes($item,'img');
 
-                                $new_img_array = [];
+                        $new_img_array = [];
 
-                                if( $new_imgs->length > 0 ) {
-                        
-                                        foreach ($new_imgs as $k => $new_img ) {
-                                                $new_img_array[ $new_img->getAttribute('id') ] = $new_img->getAttribute('url');
-                                        }
+                        if( $new_imgs->length > 0 ) {
+                
+                                foreach ($new_imgs as $k => $new_img ) {
+                                        $new_img_array[ $new_img->getAttribute('id') ] = $new_img->getAttribute('url');
                                 }
+                        }
 
-                                if( $existing_img_array !== $new_img_array ) {
+                        // order has changed
+                        if( $existing_img_array !== $new_img_array ) {
 
-                                        $listing_mod_date = date("Y-m-d H:i:s",strtotime($listing_mod_date) + 5 );
-                                        $this->logger_log('Increment mod date by 5 seconds as image order is changed but listing mod date is still same : '.$listing_mod_date );
-                                        $item->setAttribute('modTime', $listing_mod_date );
+                                if( ( strtotime($image_mod_date ) > strtotime( $db_img_mod_time ) ) ) {
+                                        // skip if image mod time is already updated in XML
+                                } else {
+
+                                        $new_image_mod_time = date("Y-m-d H:i:s",strtotime($db_img_mod_time) + 5 );
+                                        $this->logger_log('Increment image mod date by 5 seconds as image order is changed but image mod date is still same : '.$new_image_mod_time );
+                                        $this->set_node_value($item,'feedsyncImageModtime',$new_image_mod_time);
                                         
                                 }
+                        }
 
-                        endif;
-                        //check & update listing mod date if image order is changed so that it doesn't get skipped during import.
-                }
+                endif;
 
         }
 
